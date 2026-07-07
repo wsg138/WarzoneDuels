@@ -69,7 +69,8 @@ arena:
   spawn1: "-140.5,172,-299.5"
   spawn2: "-140.5,172,-339.5"
 
-  # Reserved for future spectator features.
+  # Spectator viewing platform. Players are teleported here in Adventure mode when using /duel watch.
+  # Set via /duel setspectatorlocation or /duel setspectator.
   spectator: "-140,182,-319"
 
   # Fallback evacuation point if EnthusiaTeleport is not installed or cannot resolve server spawn.
@@ -89,7 +90,7 @@ settings:
   # Launch light celebration fireworks during the victory moment.
   victory-fireworks: true
 
-  # While players are watching with /duel watch, enable vanilla reducedDebugInfo in the arena world.
+  # While players are watching with /duel watch (Adventure mode), enable vanilla reducedDebugInfo in the arena world.
   # This hides/minimizes F3 coordinates for that world until watched spectators are cleared.
   # True coordinate spoofing is intentionally not used because it requires fragile packet hacks.
   spectator-reduced-debug-info: true

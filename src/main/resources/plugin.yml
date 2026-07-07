@@ -6,7 +6,7 @@ softdepend: [Vault, EnthusiaTeleport, CombatLogX, Plan]
 commands:
   duel:
     description: Death Duel commands and setup tools.
-    usage: /duel <player|accept|deny|review|watch|draw|surrender|cancel|vault|info|settings|reload|restoreloadout|stats>
+    usage: /duel <player|accept|deny|review|watch|draw|surrender|cancel|vault|info|settings|reload|restoreloadout|stats|setspectatorlocation>
   surrender:
     description: Request a duel draw / surrender.
     usage: /surrender
@@ -28,3 +28,24 @@ permissions:
   warzoneduels.bypass.enter:
     description: Allows staff to enter the fighting footprint and bypass spectator containment.
     default: op
+  warzoneduels.duel.send:
+    description: Allows sending duel requests to other players.
+    default: true
+  warzoneduels.duel.accept:
+    description: Allows accepting incoming duel requests.
+    default: true
+  warzoneduels.duel.deny:
+    description: Allows denying incoming duel requests.
+    default: true
+  warzoneduels.duel.draw:
+    description: Allows requesting a draw or surrendering during an active duel.
+    default: true
+  warzoneduels.duel.spectate:
+    description: Allows spectating active duels via /duel watch.
+    default: true
+  warzoneduels.duel.vault:
+    description: Allows claiming spoils from the duel vault.
+    default: true
+  warzoneduels.stats:
+    description: Allows viewing duel stats for yourself and others.
+    default: true

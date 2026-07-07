@@ -20,6 +20,7 @@ import java.util.Locale;
 
 public final class DuelCommand implements CommandExecutor, TabCompleter {
     private static final String ADMIN_PERMISSION = "warzoneduels.admin";
+    private static final String VAULT_PERMISSION = "warzoneduels.duel.vault";
     private static final String DRAW_COMMAND = "draw";
     private static final String SURRENDER_COMMAND = "surrender";
     private static final String RELOAD_COMMAND = "reload";
@@ -80,7 +81,7 @@ public final class DuelCommand implements CommandExecutor, TabCompleter {
             case MAP_SAVE_COMMAND -> handleMapSave(player, args);
             case MAP_LOAD_COMMAND -> handleMapLoad(player, args);
             case "mapstatus" -> handleMapStatus(player);
-            case "setpos1", "setpos2", "setspawn1", "setspawn2", "setspectator", "setexit" -> handleArenaLocation(player, sub, args);
+            case "setpos1", "setpos2", "setspawn1", "setspawn2", "setspectator", "setspectatorlocation", "setexit" -> handleArenaLocation(player, sub, args);
             default -> handleTargetDuelStart(player, args);
         }
     }
@@ -163,7 +164,7 @@ public final class DuelCommand implements CommandExecutor, TabCompleter {
     private void sendUsage(Player player) {
         player.sendMessage(ChatColor.YELLOW + "Usage: /duel <player|accept|deny|review|watch|draw|surrender|cancel|vault|stats|info|settings>");
         if (player.hasPermission(ADMIN_PERMISSION)) {
-            player.sendMessage(ChatColor.GRAY + "Admin: /duel <mapsave|mapload|mapstatus|reload|restoreloadout|setpos1|setpos2|setspawn1|setspawn2|setspectator|setexit>");
+            player.sendMessage(ChatColor.GRAY + "Admin: /duel <mapsave|mapload|mapstatus|reload|restoreloadout|setpos1|setpos2|setspawn1|setspawn2|setspectator|setspectatorlocation|setexit>");
         }
     }
 
@@ -278,6 +279,10 @@ public final class DuelCommand implements CommandExecutor, TabCompleter {
     }
 
     private void openSpoils(Player player) {
+        if (!player.hasPermission(VAULT_PERMISSION)) {
+            duelService.sendMessage(player, "messages.no-permission");
+            return;
+        }
         List<SpoilsEntry> entries = spoilsService.getEntriesFor(player.getUniqueId());
         if (entries.isEmpty()) {
             spoilsService.sendNoSpoilsMessage(player);

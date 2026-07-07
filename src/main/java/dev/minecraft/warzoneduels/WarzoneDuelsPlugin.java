@@ -4,6 +4,7 @@ import dev.minecraft.warzoneduels.adapter.bukkit.command.DuelCommand;
 import dev.minecraft.warzoneduels.adapter.bukkit.command.StatsCommand;
 import dev.minecraft.warzoneduels.adapter.bukkit.gui.DuelGuiListener;
 import dev.minecraft.warzoneduels.adapter.bukkit.integration.CombatLogXCombatTagPort;
+import dev.minecraft.warzoneduels.adapter.bukkit.integration.LuckPermsPermissionPort;
 import dev.minecraft.warzoneduels.adapter.bukkit.integration.NoOpCombatTagPort;
 import dev.minecraft.warzoneduels.adapter.bukkit.listener.DuelListener;
 import dev.minecraft.warzoneduels.adapter.bukkit.persistence.ArenaFootprintStore;
@@ -29,6 +30,7 @@ import dev.minecraft.warzoneduels.app.DuelService;
 import dev.minecraft.warzoneduels.app.SpoilsService;
 import dev.minecraft.warzoneduels.app.StatsService;
 import dev.minecraft.warzoneduels.port.EconomyPort;
+import dev.minecraft.warzoneduels.port.PermissionPort;
 import dev.minecraft.warzoneduels.port.SpawnPort;
 import dev.minecraft.warzoneduels.port.CombatTagPort;
 import net.milkbowl.vault.economy.Economy;
@@ -52,6 +54,7 @@ public class WarzoneDuelsPlugin extends JavaPlugin {
 
         EconomyPort economyPort = new VaultEconomyPort(setupEconomy(), getConfig().getBoolean("economy.enable-wagers", true));
         SpawnPort spawnPort = new EnthusiaSpawnPort(getLogger());
+        PermissionPort permissionPort = new LuckPermsPermissionPort(this);
         RuntimeStateStore runtimeStateStore = new RuntimeStateStore(this);
         LoadoutArchiveStore loadoutArchiveStore = new LoadoutArchiveStore(this);
         SpoilsStore spoilsStore = new SpoilsStore(this);
@@ -77,6 +80,7 @@ public class WarzoneDuelsPlugin extends JavaPlugin {
             this,
             economyPort,
             spawnPort,
+            permissionPort,
             runtimeStateStore,
             loadoutArchiveStore,
             arenaResetService,

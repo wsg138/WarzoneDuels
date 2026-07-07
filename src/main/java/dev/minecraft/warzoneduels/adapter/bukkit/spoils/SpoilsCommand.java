@@ -11,6 +11,7 @@ import org.bukkit.entity.Player;
 import java.util.List;
 
 public final class SpoilsCommand implements CommandExecutor, TabCompleter {
+    private static final String VAULT_PERMISSION = "warzoneduels.duel.vault";
     private final SpoilsService spoilsService;
 
     public SpoilsCommand(SpoilsService spoilsService) {
@@ -21,6 +22,10 @@ public final class SpoilsCommand implements CommandExecutor, TabCompleter {
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!(sender instanceof Player player)) {
             sender.sendMessage("Players only.");
+            return true;
+        }
+        if (!player.hasPermission(VAULT_PERMISSION)) {
+            player.sendMessage("You do not have permission.");
             return true;
         }
         List<SpoilsEntry> entries = spoilsService.getEntriesFor(player.getUniqueId());

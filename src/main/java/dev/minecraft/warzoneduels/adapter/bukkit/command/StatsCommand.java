@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Locale;
 
 public final class StatsCommand implements CommandExecutor, TabCompleter {
+    private static final String STATS_PERMISSION = "warzoneduels.stats";
     private final StatsService statsService;
     private final PlayerHeadCache headCache;
 
@@ -27,6 +28,10 @@ public final class StatsCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (!sender.hasPermission(STATS_PERMISSION)) {
+            sender.sendMessage(ChatColor.RED + "You do not have permission.");
+            return true;
+        }
         PlayerDuelStats stats;
         if (args.length == 0) {
             if (!(sender instanceof Player player)) {
