@@ -94,7 +94,7 @@ public final class DuelService {
     private CombatTagPort combatTagPort;
 
     private final Map<UUID, BuilderSession> builders = new ConcurrentHashMap<>();
-    private final Set<UUID> oneTimeTeleportAllowance = ConcurrentHashMap.newKeySet();
+    private final Map<UUID, TeleportAllowance> teleportAllowances = new ConcurrentHashMap<>();
     private final Set<UUID> allowedArenaItemEntityIds = ConcurrentHashMap.newKeySet();
     private final Map<BlockKey, Long> allowedArenaItemSpawnLocations = new ConcurrentHashMap<>();
     private final Set<UUID> respawnToSpawn = ConcurrentHashMap.newKeySet();
@@ -323,12 +323,9 @@ public final class DuelService {
         return activeParticipantIndex.contains(playerId);
     }
 
-    public boolean isTeleportAllowed(UUID playerId) {
-        return oneTimeTeleportAllowance.remove(playerId);
-    }
-
-    public void allowTeleportOnce(UUID playerId) {
-        oneTimeTeleportAllowance.add(playerId);
+    public boolean consumeTeleportAllowance(UUID playerId, Location destination) {
+        TeleportAllowance allowance = teleportAllowances.remove(playerId);
+        return allowance != null && allowance.matches(destination, System.currentTimeMillis());
     }
 
     public void startBuilder(Player sender, Player target) {
@@ -647,6 +644,7 @@ public final class DuelService {
         watchedSpectators.putIfAbsent(player.getUniqueId(), player.getGameMode());
         enableSpectatorDebugProtection();
         player.setGameMode(GameMode.SPECTATOR);
+        player.setSpectatorTarget(null);
         teleportSafe(player, arena.spectator());
         startContainmentMonitor();
         sendMessageOrFallback(player, "messages.duel-watch-teleported", ChatColor.GREEN + "Warped to the arena stands.");
@@ -890,12 +888,11 @@ public final class DuelService {
 
     public boolean isWatchedSpectatorCommandBlocked(Player player) {
         return player != null
-            && isWatchedSpectator(player.getUniqueId())
-            && !player.hasPermission(PERMISSION_BYPASS_ENTER);
+            && isWatchedSpectator(player.getUniqueId());
     }
 
     public boolean isWatchedSpectatorTeleportBlocked(Player player, Location to, org.bukkit.event.player.PlayerTeleportEvent.TeleportCause cause) {
-        if (player == null || !isWatchedSpectator(player.getUniqueId()) || player.hasPermission(PERMISSION_BYPASS_ENTER)) {
+        if (player == null || !isWatchedSpectator(player.getUniqueId())) {
             return false;
         }
         if (cause == org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.SPECTATE) {
@@ -908,7 +905,6 @@ public final class DuelService {
         return player != null
             && to != null
             && isWatchedSpectator(player.getUniqueId())
-            && !player.hasPermission(PERMISSION_BYPASS_ENTER)
             && arena != null
             && !arena.contains(to);
     }
@@ -1709,6 +1705,7 @@ public final class DuelService {
     }
 
     private void cleanupVolatileArenaState() {
+        teleportAllowances.clear();
         allowedArenaItemEntityIds.clear();
         allowedArenaItemSpawnLocations.clear();
         trackedExplosionSources.clear();
@@ -1878,11 +1875,11 @@ public final class DuelService {
                 watchedSpectators.remove(playerId);
                 continue;
             }
-            if (player.hasPermission(PERMISSION_BYPASS_ENTER)) {
-                continue;
-            }
             if (player.getGameMode() != GameMode.SPECTATOR) {
                 player.setGameMode(GameMode.SPECTATOR);
+            }
+            if (player.getSpectatorTarget() != null) {
+                player.setSpectatorTarget(null);
             }
             if (!arena.contains(player.getLocation())) {
                 handleWatchedSpectatorExitAttempt(player);
@@ -2141,8 +2138,11 @@ public final class DuelService {
         if (player == null || location == null || location.getWorld() == null) {
             return;
         }
-        allowTeleportOnce(player.getUniqueId());
-        player.teleport(location);
+        TeleportAllowance allowance = TeleportAllowance.forDestination(location, System.currentTimeMillis() + 2000L);
+        teleportAllowances.put(player.getUniqueId(), allowance);
+        if (!player.teleport(location)) {
+            teleportAllowances.remove(player.getUniqueId(), allowance);
+        }
     }
 
     private void teleportToAssignedSpawn(Player player) {
@@ -2403,6 +2403,31 @@ public final class DuelService {
     ) {
         private boolean involves(UUID playerId) {
             return requesterId.equals(playerId) || targetId.equals(playerId);
+        }
+    }
+
+    private record TeleportAllowance(UUID worldId, double x, double y, double z, long expiresAtEpochMs) {
+        private static TeleportAllowance forDestination(Location destination, long expiresAtEpochMs) {
+            return new TeleportAllowance(
+                destination.getWorld().getUID(),
+                destination.getX(),
+                destination.getY(),
+                destination.getZ(),
+                expiresAtEpochMs
+            );
+        }
+
+        private boolean matches(Location destination, long nowEpochMs) {
+            if (destination == null || destination.getWorld() == null || nowEpochMs > expiresAtEpochMs) {
+                return false;
+            }
+            if (!worldId.equals(destination.getWorld().getUID())) {
+                return false;
+            }
+            double deltaX = x - destination.getX();
+            double deltaY = y - destination.getY();
+            double deltaZ = z - destination.getZ();
+            return (deltaX * deltaX) + (deltaY * deltaY) + (deltaZ * deltaZ) <= 0.01D;
         }
     }
 

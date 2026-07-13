@@ -1,5 +1,6 @@
 package dev.minecraft.warzoneduels.adapter.bukkit.listener;
 
+import com.destroystokyo.paper.event.player.PlayerStartSpectatingEntityEvent;
 import dev.minecraft.warzoneduels.app.DuelService;
 import dev.minecraft.warzoneduels.domain.DuelRuntimeState;
 import dev.minecraft.warzoneduels.util.SpearUtil;
@@ -670,9 +671,18 @@ public final class DuelListener implements Listener {
         }
     }
 
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public void onStartSpectatingEntity(PlayerStartSpectatingEntityEvent event) {
+        if (!duelService.isWatchedSpectator(event.getPlayer().getUniqueId())) {
+            return;
+        }
+        event.setCancelled(true);
+        duelService.sendMessage(event.getPlayer(), TELEPORT_BLOCKED_MESSAGE);
+    }
+
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onTeleport(PlayerTeleportEvent event) {
-        if (duelService.isTeleportAllowed(event.getPlayer().getUniqueId())) {
+        if (duelService.consumeTeleportAllowance(event.getPlayer().getUniqueId(), event.getTo())) {
             return;
         }
         if (duelService.isWatchedSpectatorTeleportBlocked(event.getPlayer(), event.getTo(), event.getCause())) {
