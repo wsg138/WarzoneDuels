@@ -6,9 +6,9 @@ softdepend: [Vault, EnthusiaTeleport, CombatLogX, Plan]
 commands:
   duel:
     description: Death Duel commands and setup tools.
-    usage: /duel <player|accept|deny|review|watch|draw|surrender|cancel|vault|info|settings|reload|restoreloadout|stats>
+    usage: /duel <player|accept|deny|review|watch|leave|draw|vault|stats|info|settings>
   surrender:
-    description: Request a duel draw / surrender.
+    description: Request a duel draw or cancel a queued duel.
     usage: /surrender
     aliases: [draw]
   vault:
@@ -19,12 +19,117 @@ commands:
     description: View Death Duel stats.
     usage: /stats [player]
 permissions:
+  warzoneduels.user:
+    description: Grants all ordinary WarzoneDuels player commands and features.
+    default: false
+    children:
+      warzoneduels.command.duel: true
+      warzoneduels.challenge: true
+      warzoneduels.accept: true
+      warzoneduels.deny: true
+      warzoneduels.review: true
+      warzoneduels.spectate: true
+      warzoneduels.spectate.leave: true
+      warzoneduels.draw: true
+      warzoneduels.vault: true
+      warzoneduels.stats.self: true
+      warzoneduels.stats.others: true
+      warzoneduels.info: true
   warzoneduels.admin:
-    description: Admin commands for WarzoneDuels.
+    description: Grants all WarzoneDuels user, administrative, and maintenance bypass permissions.
     default: op
+    children:
+      warzoneduels.user: true
+      warzoneduels.admin.reload: true
+      warzoneduels.admin.restoreloadout: true
+      warzoneduels.admin.map.save: true
+      warzoneduels.admin.map.load: true
+      warzoneduels.admin.map.status: true
+      warzoneduels.admin.arena.setpos: true
+      warzoneduels.admin.arena.setspawn: true
+      warzoneduels.admin.arena.setspectator: true
+      warzoneduels.admin.arena.setexit: true
+      warzoneduels.admin.recoverwatcher: true
+      warzoneduels.bypass.build: true
+      warzoneduels.bypass.enter: true
+  warzoneduels.command.duel:
+    description: Allows use of the /duel command router. Subcommands still require their own permission.
+    default: false
+  warzoneduels.challenge:
+    description: Allows creating and sending duel challenges, including GUI confirmation.
+    default: false
+  warzoneduels.accept:
+    description: Allows accepting a pending duel challenge.
+    default: false
+  warzoneduels.deny:
+    description: Allows denying a pending duel challenge.
+    default: false
+  warzoneduels.review:
+    description: Allows reviewing a pending duel challenge.
+    default: false
+  warzoneduels.spectate:
+    description: Allows entering controlled pseudo-spectator watch mode.
+    default: false
+  warzoneduels.spectate.leave:
+    description: Allows use of watcher leave commands when not already watching; active watchers can always leave safely.
+    default: false
+  warzoneduels.draw:
+    description: Allows requesting a draw or cancelling an owned queued duel.
+    default: false
+  warzoneduels.vault:
+    description: Allows opening and claiming duel vault contents.
+    default: false
+  warzoneduels.stats.self:
+    description: Allows viewing personal duel statistics.
+    default: false
+  warzoneduels.stats.others:
+    description: Allows viewing other players' duel statistics and leaderboard profiles.
+    default: false
+  warzoneduels.info:
+    description: Allows viewing active duel information and settings.
+    default: false
+  warzoneduels.admin.reload:
+    description: Allows reloading WarzoneDuels configuration.
+    default: false
+  warzoneduels.admin.restoreloadout:
+    description: Allows restoring the normal archived pre-duel loadout of an online player.
+    default: false
+  warzoneduels.admin.map.save:
+    description: Allows saving arena map snapshots.
+    default: false
+  warzoneduels.admin.map.load:
+    description: Allows loading arena map snapshots.
+    default: false
+  warzoneduels.admin.map.status:
+    description: Allows viewing arena map operation status.
+    default: false
+  warzoneduels.admin.arena.setpos:
+    description: Allows setting arena boundary positions.
+    default: false
+  warzoneduels.admin.arena.setspawn:
+    description: Allows setting duel participant spawns.
+    default: false
+  warzoneduels.admin.arena.setspectator:
+    description: Allows setting the pseudo-spectator spawn.
+    default: false
+  warzoneduels.admin.arena.setexit:
+    description: Allows setting the fallback arena exit.
+    default: false
+  warzoneduels.admin.recoverwatcher:
+    description: Allows restoring an online player's durable pseudo-spectator session.
+    default: false
   warzoneduels.bypass.build:
-    description: Allows staff to place, break, bucket, and interact with protected arena blocks for repairs.
-    default: op
+    description: Allows arena repair block, bucket, and interaction actions outside duel rules.
+    default: false
+  warzoneduels.bypass.arena-entry:
+    description: Allows entering the protected fighting footprint when not a participant.
+    default: false
+  warzoneduels.bypass.combat-entry:
+    description: Allows entering the arena shell while externally combat-tagged.
+    default: false
   warzoneduels.bypass.enter:
-    description: Allows staff to enter the fighting footprint and bypass spectator containment.
-    default: op
+    description: Legacy parent that grants both arena-entry and combat-entry bypasses.
+    default: false
+    children:
+      warzoneduels.bypass.arena-entry: true
+      warzoneduels.bypass.combat-entry: true

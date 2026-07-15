@@ -6,6 +6,7 @@ import dev.minecraft.warzoneduels.app.DuelService;
 import dev.minecraft.warzoneduels.app.SpoilsService;
 import dev.minecraft.warzoneduels.domain.BuilderSession;
 import dev.minecraft.warzoneduels.domain.spoils.SpoilsEntry;
+import dev.minecraft.warzoneduels.permission.PermissionPolicy;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.command.Command;
@@ -19,7 +20,6 @@ import java.util.List;
 import java.util.Locale;
 
 public final class DuelCommand implements CommandExecutor, TabCompleter {
-    private static final String ADMIN_PERMISSION = "warzoneduels.admin";
     private static final String DRAW_COMMAND = "draw";
     private static final String SURRENDER_COMMAND = "surrender";
     private static final String RELOAD_COMMAND = "reload";
@@ -48,10 +48,16 @@ public final class DuelCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         if (isDrawCommandAlias(command)) {
+            if (!requirePermission(player, PermissionPolicy.DRAW)) {
+                return true;
+            }
             duelService.requestDraw(player);
             return true;
         }
         if (args.length == 0) {
+            if (!requirePermission(player, PermissionPolicy.COMMAND_DUEL)) {
+                return true;
+            }
             sendUsage(player);
             return true;
         }
@@ -66,12 +72,25 @@ public final class DuelCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleSubcommand(Player player, String sub, String[] args) {
+        if (isSafetyLeave(player, args)) {
+            duelService.leaveWatchMode(player, "command-" + sub, true);
+            return;
+        }
+        String permission = STATS_COMMAND.equals(sub) && args.length >= TWO_ARGUMENTS
+            ? PermissionPolicy.STATS_OTHERS
+            : PermissionPolicy.permissionForSubcommand(sub);
+        if (permission != null && !player.hasPermission(permission)) {
+            duelService.sendMessage(player, PermissionPolicy.SPECTATE.equals(permission)
+                ? "messages.no-spectate-permission" : "messages.no-permission");
+            return;
+        }
         switch (sub) {
             case "accept" -> duelService.acceptRequest(player);
             case "deny" -> duelService.denyRequest(player);
             case DRAW_COMMAND, SURRENDER_COMMAND, "cancel" -> duelService.requestDraw(player);
             case "review" -> openPendingRequestReview(player);
             case "watch", "spectate", "stands" -> duelService.watchDuel(player);
+            case "leave", "unwatch" -> duelService.leaveWatchMode(player, "command-" + sub, true);
             case "vault" -> openSpoils(player);
             case STATS_COMMAND -> player.performCommand(args.length >= TWO_ARGUMENTS ? STATS_COMMAND + " " + args[1] : STATS_COMMAND);
             case "info", "settings" -> duelService.showSettings(player);
@@ -80,6 +99,7 @@ public final class DuelCommand implements CommandExecutor, TabCompleter {
             case MAP_SAVE_COMMAND -> handleMapSave(player, args);
             case MAP_LOAD_COMMAND -> handleMapLoad(player, args);
             case "mapstatus" -> handleMapStatus(player);
+            case "recoverwatcher" -> handleRecoverWatcher(player, args);
             case "setpos1", "setpos2", "setspawn1", "setspawn2", "setspectator", "setexit" -> handleArenaLocation(player, sub, args);
             default -> handleTargetDuelStart(player, args);
         }
@@ -87,6 +107,9 @@ public final class DuelCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+        if (isDrawCommandAlias(command)) {
+            return List.of();
+        }
         List<String> result = new ArrayList<>();
         if (args.length == ROOT_ARGUMENT_COUNT) {
             addRootCompletions(sender, result, args[0].toLowerCase(Locale.ROOT));
@@ -103,24 +126,23 @@ public final class DuelCommand implements CommandExecutor, TabCompleter {
     }
 
     private void addRootCompletions(CommandSender sender, List<String> result, String typed) {
+        if (!(sender instanceof Player)) {
+            return;
+        }
         addVisibleCommandSuggestions(sender, result, typed);
-        addOnlinePlayerCompletions(sender, result, typed);
+        if (sender.hasPermission(PermissionPolicy.CHALLENGE)) {
+            addOnlinePlayerCompletions(sender, result, typed);
+        }
     }
 
     private void addVisibleCommandSuggestions(CommandSender sender, List<String> result, String typed) {
-        boolean admin = sender.hasPermission(ADMIN_PERMISSION);
-        for (String option : duelService.commandSuggestions()) {
-            if (isHiddenAdminSuggestion(option, admin)) {
-                continue;
-            }
+        boolean activeWatcher = sender instanceof Player player && duelService.isActiveWatcher(player.getUniqueId());
+        for (String option : PermissionPolicy.visibleRootSuggestions(permission -> sender.hasPermission(permission)
+            || PermissionPolicy.STATS_SELF.equals(permission) && sender.hasPermission(PermissionPolicy.STATS_OTHERS), activeWatcher)) {
             if (matchesTyped(option, typed)) {
                 result.add(option);
             }
         }
-    }
-
-    private boolean isHiddenAdminSuggestion(String option, boolean admin) {
-        return !admin && (option.startsWith("set") || RELOAD_COMMAND.equals(option) || RESTORE_LOADOUT_COMMAND.equals(option) || option.startsWith("map"));
     }
 
     private boolean shouldCompleteOnlinePlayers(CommandSender sender, String[] args) {
@@ -128,15 +150,18 @@ public final class DuelCommand implements CommandExecutor, TabCompleter {
             return false;
         }
         if (RESTORE_LOADOUT_COMMAND.equalsIgnoreCase(args[0])) {
-            return sender.hasPermission(ADMIN_PERMISSION);
+            return sender.hasPermission(PermissionPolicy.ADMIN_RESTORE_LOADOUT);
         }
-        return STATS_COMMAND.equalsIgnoreCase(args[0]);
+        if ("recoverwatcher".equalsIgnoreCase(args[0])) {
+            return sender.hasPermission(PermissionPolicy.ADMIN_RECOVER_WATCHER);
+        }
+        return STATS_COMMAND.equalsIgnoreCase(args[0]) && sender.hasPermission(PermissionPolicy.STATS_OTHERS);
     }
 
     private boolean shouldCompleteMapIds(CommandSender sender, String[] args) {
         return args.length == TWO_ARGUMENTS
             && (MAP_SAVE_COMMAND.equalsIgnoreCase(args[0]) || MAP_LOAD_COMMAND.equalsIgnoreCase(args[0]))
-            && sender.hasPermission(ADMIN_PERMISSION);
+            && sender.hasPermission(MAP_SAVE_COMMAND.equalsIgnoreCase(args[0]) ? PermissionPolicy.ADMIN_MAP_SAVE : PermissionPolicy.ADMIN_MAP_LOAD);
     }
 
     private void addOnlinePlayerCompletions(CommandSender sender, List<String> result, String typed) {
@@ -161,10 +186,10 @@ public final class DuelCommand implements CommandExecutor, TabCompleter {
     }
 
     private void sendUsage(Player player) {
-        player.sendMessage(ChatColor.YELLOW + "Usage: /duel <player|accept|deny|review|watch|draw|surrender|cancel|vault|stats|info|settings>");
-        if (player.hasPermission(ADMIN_PERMISSION)) {
-            player.sendMessage(ChatColor.GRAY + "Admin: /duel <mapsave|mapload|mapstatus|reload|restoreloadout|setpos1|setpos2|setspawn1|setspawn2|setspectator|setexit>");
-        }
+        boolean activeWatcher = duelService.isActiveWatcher(player.getUniqueId());
+        List<String> visible = PermissionPolicy.visibleRootSuggestions(player::hasPermission, activeWatcher);
+        String challenge = player.hasPermission(PermissionPolicy.CHALLENGE) ? "player|" : "";
+        player.sendMessage(ChatColor.YELLOW + "Usage: /duel <" + challenge + String.join("|", visible) + ">");
     }
 
     private String formatLocation(Location location) {
@@ -172,16 +197,10 @@ public final class DuelCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleReload(Player player) {
-        if (!requireAdmin(player)) {
-            return;
-        }
         duelService.reloadFromCommand(player);
     }
 
     private void handleRestoreLoadout(Player player, String[] args) {
-        if (!requireAdmin(player)) {
-            return;
-        }
         if (args.length < TWO_ARGUMENTS) {
             player.sendMessage(ChatColor.RED + "Usage: /duel restoreloadout <player>");
             return;
@@ -195,9 +214,6 @@ public final class DuelCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleMapSave(Player player, String[] args) {
-        if (!requireAdmin(player)) {
-            return;
-        }
         if (args.length < TWO_ARGUMENTS) {
             player.sendMessage(ChatColor.RED + "Usage: /duel mapsave <mapId>");
             return;
@@ -206,9 +222,6 @@ public final class DuelCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleMapLoad(Player player, String[] args) {
-        if (!requireAdmin(player)) {
-            return;
-        }
         if (args.length < TWO_ARGUMENTS) {
             player.sendMessage(ChatColor.RED + "Usage: /duel mapload <mapId>");
             return;
@@ -217,22 +230,16 @@ public final class DuelCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleMapStatus(Player player) {
-        if (!requireAdmin(player)) {
-            return;
-        }
         duelService.showMapStatus(player);
     }
 
     private void handleArenaLocation(Player player, String subcommand, String[] args) {
-        if (!requireAdmin(player)) {
-            return;
-        }
         Location location = parseLocationArgument(player, args);
         if (location == null) {
             player.sendMessage(ChatColor.RED + "Invalid coordinates.");
             return;
         }
-        duelService.updateArenaLocation(subcommand, location);
+        duelService.updateArenaLocation(player, subcommand, location);
         player.sendMessage(ChatColor.GREEN + "Updated " + subcommand + " to " + formatLocation(location));
     }
 
@@ -253,6 +260,9 @@ public final class DuelCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleTargetDuelStart(Player player, String[] args) {
+        if (!requirePermission(player, PermissionPolicy.CHALLENGE)) {
+            return;
+        }
         if (args.length != ROOT_ARGUMENT_COUNT) {
             sendUsage(player);
             return;
@@ -269,8 +279,8 @@ public final class DuelCommand implements CommandExecutor, TabCompleter {
         }
     }
 
-    private boolean requireAdmin(Player player) {
-        if (player.hasPermission(ADMIN_PERMISSION)) {
+    private boolean requirePermission(Player player, String permission) {
+        if (player.hasPermission(permission)) {
             return true;
         }
         duelService.sendMessage(player, "messages.no-permission");
@@ -288,5 +298,29 @@ public final class DuelCommand implements CommandExecutor, TabCompleter {
 
     private void openPendingRequestReview(Player player) {
         duelService.openPendingRequestReview(player);
+    }
+
+    private void handleRecoverWatcher(Player player, String[] args) {
+        if (args.length < TWO_ARGUMENTS) {
+            player.sendMessage(ChatColor.RED + "Usage: /duel recoverwatcher <player>");
+            return;
+        }
+        Player target = player.getServer().getPlayer(args[1]);
+        if (target == null || !target.isOnline()) {
+            duelService.sendMessage(player, TARGET_OFFLINE_MESSAGE);
+            return;
+        }
+        boolean found = duelService.isActiveWatcher(target.getUniqueId()) || duelService.hasRecoverableWatcherSession(target.getUniqueId());
+        boolean success = duelService.recoverWatcher(player, target);
+        duelService.sendMessage(player, success ? "messages.admin-watcher-recovery-success"
+            : found ? "messages.admin-watcher-recovery-failure" : "messages.admin-watcher-recovery-none", "{player}", target.getName());
+    }
+
+    private boolean isSafetyLeave(Player player, String[] args) {
+        if (!duelService.isActiveWatcher(player.getUniqueId()) || args.length == 0) {
+            return false;
+        }
+        String sub = args[0].toLowerCase(Locale.ROOT);
+        return sub.equals("leave") || sub.equals("unwatch") || sub.equals("watch");
     }
 }

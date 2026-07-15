@@ -13,6 +13,7 @@ import dev.minecraft.warzoneduels.adapter.bukkit.persistence.LoadoutArchiveStore
 import dev.minecraft.warzoneduels.adapter.bukkit.persistence.PlayerStatsStore;
 import dev.minecraft.warzoneduels.adapter.bukkit.persistence.RuntimeStateStore;
 import dev.minecraft.warzoneduels.adapter.bukkit.persistence.SpoilsStore;
+import dev.minecraft.warzoneduels.adapter.bukkit.persistence.SpectatorSessionStore;
 import dev.minecraft.warzoneduels.adapter.bukkit.reset.ArenaResetService;
 import dev.minecraft.warzoneduels.adapter.bukkit.spoils.SpoilsCommand;
 import dev.minecraft.warzoneduels.adapter.bukkit.spoils.SpoilsGuiListener;
@@ -79,6 +80,7 @@ public class WarzoneDuelsPlugin extends JavaPlugin {
             spawnPort,
             runtimeStateStore,
             loadoutArchiveStore,
+            new SpectatorSessionStore(this),
             arenaResetService,
             activeSpoilsService,
             statsService,
@@ -97,8 +99,8 @@ public class WarzoneDuelsPlugin extends JavaPlugin {
 
         getServer().getPluginManager().registerEvents(new DuelListener(activeDuelService), this);
         getServer().getPluginManager().registerEvents(new DuelGuiListener(activeDuelService), this);
-        getServer().getPluginManager().registerEvents(new SpoilsGuiListener(activeSpoilsService), this);
-        getServer().getPluginManager().registerEvents(new StatsGuiListener(statsService, headCache), this);
+        getServer().getPluginManager().registerEvents(new SpoilsGuiListener(this, activeSpoilsService), this);
+        getServer().getPluginManager().registerEvents(new StatsGuiListener(this, statsService, headCache), this);
         getServer().getPluginManager().registerEvents(new PlayerHeadCacheListener(headCache), this);
 
         if (getConfig().getBoolean("plan.enabled", true)) {
@@ -123,13 +125,13 @@ public class WarzoneDuelsPlugin extends JavaPlugin {
         }
         PluginCommand vaultCommand = getCommand("vault");
         if (vaultCommand != null) {
-            SpoilsCommand command = new SpoilsCommand(activeSpoilsService);
+            SpoilsCommand command = new SpoilsCommand(this, activeSpoilsService);
             vaultCommand.setExecutor(command);
             vaultCommand.setTabCompleter(command);
         }
         PluginCommand statsCommand = getCommand("stats");
         if (statsCommand != null) {
-            StatsCommand command = new StatsCommand(statsService, headCache);
+            StatsCommand command = new StatsCommand(this, statsService, headCache);
             statsCommand.setExecutor(command);
             statsCommand.setTabCompleter(command);
         }

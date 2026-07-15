@@ -1,7 +1,7 @@
 # WarzoneDuels
 # This plugin currently supports one global duel arena and one active duel at a time.
 # The arena bounds should cover the full colosseum / viewing structure.
-# Spectators are not plugin-managed yet, so this cuboid is used mainly for duel containment and arena reset.
+# Duel watchers use a durable Adventure-mode pseudo-spectator session centered on the configured spectator spawn.
 
 messages:
   prefix: "&6[Duel]&r "
@@ -29,9 +29,22 @@ messages:
   duel-start: "&6Duel started: &e{p1} &6vs &e{p2}&6{wager}."
   duel-watch-broadcast: "&eA duel has begun. Click here to warp to the arena stands."
   duel-watch-hover: "&7Warp to the arena stands to watch this duel."
-  duel-watch-teleported: "&aWarped to the arena stands."
+  duel-watch-started: "&aYou are now watching the duel. Use &e/duel leave&a to return."
+  duel-watch-ended: "&aYou stopped watching and your previous state was restored."
+  duel-watch-already-watching: "&eYou are already watching. Use &6/duel leave&e to return."
   duel-watch-unavailable: "&cThere is no active duel to watch."
   duel-watch-participant: "&cYou are already participating in this duel."
+  duel-watch-incompatible: "&cFinish or cancel your current duel activity before watching."
+  duel-watch-not-watching: "&7You are not currently watching a duel."
+  no-spectate-permission: "&cYou do not have permission to watch duels."
+  watcher-action-blocked: "&cYou cannot do that while watching a duel."
+  watcher-teleport-blocked: "&cLeave watch mode before teleporting."
+  watcher-boundary-return: "&eYou were returned to the spectator area."
+  watcher-state-recovered: "&aYour unfinished watcher session was safely recovered."
+  watcher-recovery-failure: "&cYour watcher state could not be fully recovered. Staff have been notified."
+  admin-watcher-recovery-success: "&aRecovered watcher state for &e{player}&a."
+  admin-watcher-recovery-failure: "&cWatcher state for &e{player}&c could not be fully recovered. The durable record was retained."
+  admin-watcher-recovery-none: "&7No watcher session or recovery marker was found for &e{player}&7."
   duel-end: "&6Duel ended: &e{winner}&6 won{wager}."
   duel-draw: "&6Duel ended in a draw."
   duel-risk-warning: "&cDeath Duels are not keep-inventory. If you lose, you lose the gear you brought."
@@ -69,7 +82,7 @@ arena:
   spawn1: "-140.5,172,-299.5"
   spawn2: "-140.5,172,-339.5"
 
-  # Reserved for future spectator features.
+  # Center point for the controlled pseudo-spectator boundary.
   spectator: "-140,182,-319"
 
   # Fallback evacuation point if EnthusiaTeleport is not installed or cannot resolve server spawn.
@@ -89,10 +102,22 @@ settings:
   # Launch light celebration fireworks during the victory moment.
   victory-fireworks: true
 
-  # While players are watching with /duel watch, enable vanilla reducedDebugInfo in the arena world.
-  # This hides/minimizes F3 coordinates for that world until watched spectators are cleared.
-  # True coordinate spoofing is intentionally not used because it requires fragile packet hacks.
-  spectator-reduced-debug-info: true
+  # Watchers are enforced in Adventure mode at this interval. Values are safety-clamped to 1-2 ticks.
+  spectator-enforcement-interval-ticks: 1
+
+  # Cylindrical horizontal boundary and symmetric vertical range centered on arena.spectator.
+  spectator-boundary:
+    horizontal-radius: 40
+    vertical-radius: 25
+    return-message-cooldown-millis: 2000
+
+  # Extra commands allowed during watch mode. The built-in safe list is always:
+  # /duel leave, /duel unwatch, /duel watch (leave toggle), /duel info, /duel settings.
+  # Do not add teleport, inventory, item, or administrative mutation commands here.
+  allowed-watcher-commands: []
+
+  # Recovery policy: a successful exit returns the player to the captured original location unless it is
+  # inside the arena, in which case the configured server spawn/arena exit is used.
 
   # Disconnect grace during an active duel before the offline player forfeits.
   disconnect-grace-seconds: 30

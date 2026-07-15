@@ -1,6 +1,5 @@
 package dev.minecraft.warzoneduels.adapter.bukkit.listener;
 
-import com.destroystokyo.paper.event.player.PlayerStartSpectatingEntityEvent;
 import dev.minecraft.warzoneduels.app.DuelService;
 import dev.minecraft.warzoneduels.domain.DuelRuntimeState;
 import dev.minecraft.warzoneduels.util.SpearUtil;
@@ -37,7 +36,13 @@ import org.bukkit.event.entity.ItemDespawnEvent;
 import org.bukkit.event.entity.ItemSpawnEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
+import org.bukkit.event.entity.ProjectileHitEvent;
+import org.bukkit.event.entity.EntityTargetLivingEntityEvent;
+import org.bukkit.event.entity.AreaEffectCloudApplyEvent;
+import org.bukkit.event.entity.PotionSplashEvent;
 import org.bukkit.event.vehicle.VehicleDestroyEvent;
+import org.bukkit.event.vehicle.VehicleEnterEvent;
+import org.bukkit.event.vehicle.VehicleMoveEvent;
 import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerBucketEmptyEvent;
@@ -47,11 +52,25 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
+import org.bukkit.event.player.PlayerArmorStandManipulateEvent;
+import org.bukkit.event.player.PlayerFishEvent;
+import org.bukkit.event.player.PlayerGameModeChangeEvent;
+import org.bukkit.event.player.PlayerInteractAtEntityEvent;
+import org.bukkit.event.player.PlayerInteractEntityEvent;
+import org.bukkit.event.entity.PlayerLeashEntityEvent;
+import com.destroystokyo.paper.event.player.PlayerPickupExperienceEvent;
+import org.bukkit.event.player.PlayerPortalEvent;
+import org.bukkit.event.player.PlayerShearEntityEvent;
+import org.bukkit.event.player.PlayerSwapHandItemsEvent;
+import org.bukkit.event.player.PlayerToggleFlightEvent;
 import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
 import org.bukkit.event.block.Action;
 import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -60,7 +79,6 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class DuelListener implements Listener {
-    private static final String TELEPORT_BLOCKED_MESSAGE = "messages.teleport-blocked";
     private static final int ARENA_BOUNDARY_RADIUS = 2;
     private static final double GLIDE_DOWNWARD_VELOCITY = -0.35D;
 
@@ -74,6 +92,10 @@ public final class DuelListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onBlockPlace(BlockPlaceEvent event) {
+        if (blockWatcherAction(event.getPlayer())) {
+            event.setCancelled(true);
+            return;
+        }
         if (duelService.isDuelCountdownActive() && duelService.isInActiveDuel(event.getPlayer().getUniqueId())) {
             event.setCancelled(true);
             return;
@@ -94,6 +116,10 @@ public final class DuelListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
+        if (blockWatcherAction(event.getPlayer())) {
+            event.setCancelled(true);
+            return;
+        }
         if (duelService.isDuelCountdownActive() && duelService.isInActiveDuel(event.getPlayer().getUniqueId())) {
             event.setCancelled(true);
             return;
@@ -117,6 +143,10 @@ public final class DuelListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onBucketEmpty(PlayerBucketEmptyEvent event) {
+        if (blockWatcherAction(event.getPlayer())) {
+            event.setCancelled(true);
+            return;
+        }
         if (duelService.isDuelCountdownActive() && duelService.isInActiveDuel(event.getPlayer().getUniqueId())) {
             event.setCancelled(true);
             return;
@@ -137,6 +167,10 @@ public final class DuelListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onBucketFill(PlayerBucketFillEvent event) {
+        if (blockWatcherAction(event.getPlayer())) {
+            event.setCancelled(true);
+            return;
+        }
         if (duelService.shouldProtectArenaShellBlock(event.getBlockClicked().getLocation(), event.getPlayer())
             || duelService.shouldProtectArenaShellBlock(event.getBlock().getLocation(), event.getPlayer())) {
             event.setCancelled(true);
@@ -190,6 +224,10 @@ public final class DuelListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onPlayerDropItem(PlayerDropItemEvent event) {
+        if (blockWatcherAction(event.getPlayer())) {
+            event.setCancelled(true);
+            return;
+        }
         if (!duelService.isInActiveDuel(event.getPlayer().getUniqueId())) {
             return;
         }
@@ -218,6 +256,10 @@ public final class DuelListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onEntityPickupItem(EntityPickupItemEvent event) {
+        if (event.getEntity() instanceof Player player && duelService.shouldBlockWatcherAction(player)) {
+            event.setCancelled(true);
+            return;
+        }
         if (event.getEntity() instanceof Player) {
             duelService.forgetArenaItemEntity(event.getItem().getUniqueId());
         }
@@ -241,6 +283,10 @@ public final class DuelListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onInteract(PlayerInteractEvent event) {
+        if (blockWatcherAction(event.getPlayer())) {
+            event.setCancelled(true);
+            return;
+        }
         if (cancelProtectedInteraction(event) || cancelInactiveArenaExplosiveInteraction(event)) {
             return;
         }
@@ -321,6 +367,10 @@ public final class DuelListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onEntityPlace(EntityPlaceEvent event) {
+        if (event.getPlayer() != null && blockWatcherAction(event.getPlayer())) {
+            event.setCancelled(true);
+            return;
+        }
         if (duelService.runtimeState() != DuelRuntimeState.ACTIVE || duelService.arena() == null) {
             return;
         }
@@ -339,6 +389,10 @@ public final class DuelListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onConsume(PlayerItemConsumeEvent event) {
+        if (blockWatcherAction(event.getPlayer())) {
+            event.setCancelled(true);
+            return;
+        }
         if (duelService.runtimeState() != DuelRuntimeState.ACTIVE) {
             return;
         }
@@ -351,6 +405,10 @@ public final class DuelListener implements Listener {
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onProjectileLaunch(ProjectileLaunchEvent event) {
         if (!(event.getEntity().getShooter() instanceof Player player)) {
+            return;
+        }
+        if (blockWatcherAction(player)) {
+            event.setCancelled(true);
             return;
         }
         if (!duelService.isInActiveDuel(player.getUniqueId())) {
@@ -482,13 +540,19 @@ public final class DuelListener implements Listener {
         if (!(event.getEntity() instanceof Player player)) {
             return;
         }
-        if (duelService.shouldCancelArenaSpectatorDamage(player)) {
+        if (duelService.shouldBlockWatcherAction(player) || duelService.shouldCancelArenaSpectatorDamage(player)) {
             event.setCancelled(true);
         }
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onDamage(EntityDamageByEntityEvent event) {
+        Player attackingPlayer = resolveAttackingPlayer(event.getDamager());
+        if (event.getEntity() instanceof Player target && duelService.shouldBlockWatcherAction(target)
+            || attackingPlayer != null && duelService.shouldBlockWatcherAction(attackingPlayer)) {
+            event.setCancelled(true);
+            return;
+        }
         if (cancelVictoryFireworkDamage(event)) {
             return;
         }
@@ -579,6 +643,12 @@ public final class DuelListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onDeath(PlayerDeathEvent event) {
+        if (duelService.isActiveWatcher(event.getEntity().getUniqueId())) {
+            event.getDrops().clear();
+            event.setDroppedExp(0);
+            event.setKeepInventory(true);
+            return;
+        }
         boolean duelDeath = duelService.isInActiveDuel(event.getEntity().getUniqueId());
         boolean forcedDeath = duelService.consumePendingForcedDeath(event.getEntity().getUniqueId());
         if (!duelDeath && !forcedDeath) {
@@ -597,6 +667,11 @@ public final class DuelListener implements Listener {
         duelService.handleQuit(event.getPlayer());
     }
 
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onKick(PlayerKickEvent event) {
+        duelService.handleKick(event.getPlayer());
+    }
+
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
         duelService.handleJoin(event.getPlayer());
@@ -610,9 +685,7 @@ public final class DuelListener implements Listener {
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onMove(PlayerMoveEvent event) {
         Location to = event.getTo();
-        if (duelService.isWatchedSpectatorLeaving(event.getPlayer(), to)) {
-            event.setTo(event.getFrom());
-            duelService.handleWatchedSpectatorExitAttempt(event.getPlayer());
+        if (duelService.shouldBlockWatcherAction(event.getPlayer())) {
             return;
         }
         if (duelService.shouldBlockArenaFootprintEntry(event.getPlayer(), to)) {
@@ -657,9 +730,9 @@ public final class DuelListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onCommand(PlayerCommandPreprocessEvent event) {
-        if (duelService.isWatchedSpectatorCommandBlocked(event.getPlayer())) {
+        if (duelService.shouldBlockWatcherAction(event.getPlayer()) && !duelService.isAllowedCommandForWatcher(event.getMessage())) {
             event.setCancelled(true);
-            duelService.sendMessage(event.getPlayer(), "messages.blocked-command");
+            duelService.sendWatcherActionBlocked(event.getPlayer());
             return;
         }
         if (!duelService.isParticipantRestricted(event.getPlayer().getUniqueId())) {
@@ -672,22 +745,13 @@ public final class DuelListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
-    public void onStartSpectatingEntity(PlayerStartSpectatingEntityEvent event) {
-        if (!duelService.isWatchedSpectator(event.getPlayer().getUniqueId())) {
-            return;
-        }
-        event.setCancelled(true);
-        duelService.sendMessage(event.getPlayer(), TELEPORT_BLOCKED_MESSAGE);
-    }
-
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onTeleport(PlayerTeleportEvent event) {
         if (duelService.consumeTeleportAllowance(event.getPlayer().getUniqueId(), event.getTo())) {
             return;
         }
-        if (duelService.isWatchedSpectatorTeleportBlocked(event.getPlayer(), event.getTo(), event.getCause())) {
+        if (duelService.shouldBlockWatcherTeleport(event.getPlayer())) {
             event.setCancelled(true);
-            duelService.sendMessage(event.getPlayer(), TELEPORT_BLOCKED_MESSAGE);
+            duelService.sendWatcherTeleportBlocked(event.getPlayer());
             return;
         }
         if (!duelService.isInActiveDuel(event.getPlayer().getUniqueId())) {
@@ -699,12 +763,12 @@ public final class DuelListener implements Listener {
         }
         if (event.getCause() == TeleportCause.ENDER_PEARL && !duelService.isCombatItemEnabled(Material.ENDER_PEARL, event.getPlayer())) {
             event.setCancelled(true);
-            duelService.sendMessage(event.getPlayer(), TELEPORT_BLOCKED_MESSAGE);
+            duelService.sendMessage(event.getPlayer(), "messages.teleport-blocked");
             return;
         }
         if (event.getCause() == TeleportCause.CHORUS_FRUIT && !duelService.isCombatItemEnabled(Material.CHORUS_FRUIT, event.getPlayer())) {
             event.setCancelled(true);
-            duelService.sendMessage(event.getPlayer(), TELEPORT_BLOCKED_MESSAGE);
+            duelService.sendMessage(event.getPlayer(), "messages.teleport-blocked");
             return;
         }
         Location to = event.getTo();
@@ -719,7 +783,7 @@ public final class DuelListener implements Listener {
         }
         if (to != null && !duelService.isAllowedDuelTeleportDestination(to)) {
             event.setCancelled(true);
-            duelService.sendMessage(event.getPlayer(), TELEPORT_BLOCKED_MESSAGE);
+            duelService.sendMessage(event.getPlayer(), "messages.teleport-blocked");
         }
     }
 
@@ -731,6 +795,146 @@ public final class DuelListener implements Listener {
         if (event.isGliding() && duelService.isInActiveDuel(player.getUniqueId()) && !duelService.isCombatItemEnabled(Material.ELYTRA, player)) {
             event.setCancelled(true);
             duelService.sendBlockedCombatItemMessage(player);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public void onWatcherInteractEntity(PlayerInteractEntityEvent event) {
+        if (blockWatcherAction(event.getPlayer())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public void onWatcherInteractAtEntity(PlayerInteractAtEntityEvent event) {
+        if (blockWatcherAction(event.getPlayer())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public void onWatcherArmorStandManipulate(PlayerArmorStandManipulateEvent event) {
+        if (blockWatcherAction(event.getPlayer())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public void onWatcherInventoryClick(InventoryClickEvent event) {
+        if (event.getWhoClicked() instanceof Player player && blockWatcherAction(player)) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public void onWatcherInventoryDrag(InventoryDragEvent event) {
+        if (event.getWhoClicked() instanceof Player player && blockWatcherAction(player)) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public void onWatcherSwapHands(PlayerSwapHandItemsEvent event) {
+        if (blockWatcherAction(event.getPlayer())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public void onWatcherExperiencePickup(PlayerPickupExperienceEvent event) {
+        if (duelService.shouldBlockWatcherAction(event.getPlayer())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public void onWatcherVehicleEnter(VehicleEnterEvent event) {
+        if (event.getEntered() instanceof Player player && blockWatcherAction(player)) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onWatcherVehicleMove(VehicleMoveEvent event) {
+        for (Entity passenger : List.copyOf(event.getVehicle().getPassengers())) {
+            if (passenger instanceof Player player && duelService.shouldBlockWatcherAction(player)) {
+                event.getVehicle().removePassenger(player);
+                duelService.enforceWatcherState(player);
+            }
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public void onWatcherPortal(PlayerPortalEvent event) {
+        if (duelService.shouldBlockWatcherAction(event.getPlayer())) {
+            event.setCancelled(true);
+            duelService.sendWatcherTeleportBlocked(event.getPlayer());
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public void onWatcherFishing(PlayerFishEvent event) {
+        if (blockWatcherAction(event.getPlayer())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public void onWatcherLeash(PlayerLeashEntityEvent event) {
+        if (blockWatcherAction(event.getPlayer())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public void onWatcherShear(PlayerShearEntityEvent event) {
+        if (blockWatcherAction(event.getPlayer())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public void onWatcherMobTarget(EntityTargetLivingEntityEvent event) {
+        if (event.getTarget() instanceof Player player && duelService.shouldBlockWatcherAction(player)) {
+            event.setCancelled(true);
+            event.setTarget(null);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public void onWatcherGameModeChange(PlayerGameModeChangeEvent event) {
+        if (duelService.shouldBlockWatcherAction(event.getPlayer()) && event.getNewGameMode() != org.bukkit.GameMode.ADVENTURE) {
+            event.setCancelled(true);
+            duelService.sendWatcherActionBlocked(event.getPlayer());
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public void onWatcherToggleFlight(PlayerToggleFlightEvent event) {
+        if (duelService.shouldBlockWatcherAction(event.getPlayer()) && !event.isFlying()) {
+            event.setCancelled(true);
+            duelService.enforceWatcherState(event.getPlayer());
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public void onWatcherProjectileHit(ProjectileHitEvent event) {
+        if (event.getHitEntity() instanceof Player player && duelService.shouldBlockWatcherAction(player)) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public void onWatcherPotionSplash(PotionSplashEvent event) {
+        if (event.getPotion().getShooter() instanceof Player player && duelService.shouldBlockWatcherAction(player)) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public void onWatcherAreaEffectCloud(AreaEffectCloudApplyEvent event) {
+        if (event.getEntity().getSource() instanceof Player player && duelService.shouldBlockWatcherAction(player)) {
+            event.setCancelled(true);
         }
     }
 
@@ -751,6 +955,14 @@ public final class DuelListener implements Listener {
             return player;
         }
         return null;
+    }
+
+    private boolean blockWatcherAction(Player player) {
+        if (!duelService.shouldBlockWatcherAction(player)) {
+            return false;
+        }
+        duelService.sendWatcherActionBlocked(player);
+        return true;
     }
 
     private Material resolveExplosionMaterial(Entity entity) {

@@ -5,6 +5,7 @@ import dev.minecraft.warzoneduels.WarzoneDuelsPlugin;
 import dev.minecraft.warzoneduels.adapter.bukkit.gui.DuelGui;
 import dev.minecraft.warzoneduels.adapter.bukkit.persistence.LoadoutArchiveStore;
 import dev.minecraft.warzoneduels.adapter.bukkit.persistence.RuntimeStateStore;
+import dev.minecraft.warzoneduels.adapter.bukkit.persistence.SpectatorSessionStore;
 import dev.minecraft.warzoneduels.adapter.bukkit.reset.ArenaResetService;
 import dev.minecraft.warzoneduels.domain.ActiveDuel;
 import dev.minecraft.warzoneduels.domain.ArenaDefinition;
@@ -16,11 +17,14 @@ import dev.minecraft.warzoneduels.domain.DuelRuntimeState;
 import dev.minecraft.warzoneduels.domain.DuelSettings;
 import dev.minecraft.warzoneduels.domain.LoadoutSnapshot;
 import dev.minecraft.warzoneduels.domain.MatchParticipant;
+import dev.minecraft.warzoneduels.domain.TeleportAllowanceReason;
+import dev.minecraft.warzoneduels.domain.TypedTeleportAllowance;
 import dev.minecraft.warzoneduels.domain.stats.PlayerDuelStats;
 import dev.minecraft.warzoneduels.domain.terrain.ArenaMapOperationStatus;
 import dev.minecraft.warzoneduels.port.EconomyPort;
 import dev.minecraft.warzoneduels.port.SpawnPort;
 import dev.minecraft.warzoneduels.port.CombatTagPort;
+import dev.minecraft.warzoneduels.permission.PermissionPolicy;
 import dev.minecraft.warzoneduels.util.SpearUtil;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
@@ -30,7 +34,6 @@ import org.bukkit.ChatColor;
 import org.bukkit.Color;
 import org.bukkit.FireworkEffect;
 import org.bukkit.GameMode;
-import org.bukkit.GameRule;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -48,7 +51,6 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.net.InetAddress;
-import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -74,8 +76,6 @@ public final class DuelService {
     private static final String MSG_TARGET_OFFLINE = "messages.target-offline";
     private static final String MSG_CANNOT_AFFORD = "messages.cannot-afford";
     private static final String MSG_NO_PENDING_REQUEST = "messages.no-pending-request";
-    private static final String PERMISSION_BYPASS_BUILD = "warzoneduels.bypass.build";
-    private static final String PERMISSION_BYPASS_ENTER = "warzoneduels.bypass.enter";
     private static final String PLAYER_PLACEHOLDER = "{player}";
     private static final double NO_WAGER = 0D;
     private static final long QUEUED_START_PERIOD_TICKS = 20L;
@@ -94,7 +94,7 @@ public final class DuelService {
     private CombatTagPort combatTagPort;
 
     private final Map<UUID, BuilderSession> builders = new ConcurrentHashMap<>();
-    private final Map<UUID, TeleportAllowance> teleportAllowances = new ConcurrentHashMap<>();
+    private final Map<UUID, TypedTeleportAllowance> teleportAllowances = new ConcurrentHashMap<>();
     private final Set<UUID> allowedArenaItemEntityIds = ConcurrentHashMap.newKeySet();
     private final Map<BlockKey, Long> allowedArenaItemSpawnLocations = new ConcurrentHashMap<>();
     private final Set<UUID> respawnToSpawn = ConcurrentHashMap.newKeySet();
@@ -106,7 +106,7 @@ public final class DuelService {
     private final Map<UUID, Long> arenaExitMessageCooldowns = new ConcurrentHashMap<>();
     private final Map<UUID, Material> trackedExplosionSources = new ConcurrentHashMap<>();
     private final Set<UUID> victoryFireworkIds = ConcurrentHashMap.newKeySet();
-    private final Map<UUID, GameMode> watchedSpectators = new ConcurrentHashMap<>();
+    private final SpectatorManager spectatorManager;
 
     private ArenaDefinition arena;
     private DuelRequest pendingRequest;
@@ -124,8 +124,6 @@ public final class DuelService {
     private int startCountdownSeconds;
     private int victoryMomentSeconds;
     private boolean victoryFireworks;
-    private boolean spectatorReducedDebugInfo;
-    private Boolean previousReducedDebugInfo;
     private String matchmakingWorld;
     private int matchmakingMinX;
     private int matchmakingMaxX;
@@ -152,6 +150,7 @@ public final class DuelService {
         SpawnPort spawnPort,
         RuntimeStateStore runtimeStateStore,
         LoadoutArchiveStore loadoutArchiveStore,
+        SpectatorSessionStore spectatorSessionStore,
         ArenaResetService arenaResetService,
         SpoilsService spoilsService,
         StatsService statsService,
@@ -165,6 +164,13 @@ public final class DuelService {
         this.spawnPort = spawnPort;
         this.runtimeStateStore = runtimeStateStore;
         this.loadoutArchiveStore = loadoutArchiveStore;
+        this.spectatorManager = new SpectatorManager(
+            plugin,
+            spectatorSessionStore,
+            this::activeParticipantIds,
+            () -> arena,
+            this::exitLocation
+        );
         this.arenaResetService = arenaResetService;
         this.spoilsService = spoilsService;
         this.statsService = statsService;
@@ -184,9 +190,11 @@ public final class DuelService {
         recoveryTeleportIds.clear();
         recoveryTeleportIds.addAll(runtimeStateStore.loadRecoveryTeleportIds());
         recoverActiveDuelIfNeeded();
+        spectatorManager.enable();
     }
 
     public void disable(boolean serverStopping) {
+        spectatorManager.disable(serverStopping ? "server-shutdown" : "plugin-disable");
         cancelRequestExpiryTask();
         cancelDisconnectMonitorTask();
         cancelQueuedStartTask();
@@ -201,7 +209,6 @@ public final class DuelService {
 
         if (duelEnding && activeDuel != null) {
             teleportOnlineParticipantsToExit(activeDuel);
-            clearWatchedSpectators(true);
             activeDuel = null;
             duelEnding = false;
             runtimeStateStore.clearRuntime();
@@ -214,7 +221,6 @@ public final class DuelService {
 
         if (serverStopping) {
             handleServerStoppingDisable();
-            clearWatchedSpectators(true);
             runtimeStateStore.clearReloadResumeMarker();
             runtimeStateStore.clearRuntime();
             builders.clear();
@@ -226,7 +232,6 @@ public final class DuelService {
             return;
         }
 
-        clearWatchedSpectators(true);
         if (activeDuel != null) {
             runtimeStateStore.saveActiveDuelSync(activeDuel);
             runtimeStateStore.markReloadResume();
@@ -251,7 +256,6 @@ public final class DuelService {
         startCountdownSeconds = Math.max(0, config.getInt("settings.start-countdown-seconds", 5));
         victoryMomentSeconds = Math.max(0, config.getInt("settings.victory-moment-seconds", 6));
         victoryFireworks = config.getBoolean("settings.victory-fireworks", true);
-        spectatorReducedDebugInfo = config.getBoolean("settings.spectator-reduced-debug-info", true);
         matchmakingWorld = config.getString("matchmaking-spawn.world", config.getString("arena.world", "world"));
         matchmakingMinX = Math.min(config.getInt("matchmaking-spawn.corner1.x", -218), config.getInt("matchmaking-spawn.corner2.x", 219));
         matchmakingMaxX = Math.max(config.getInt("matchmaking-spawn.corner1.x", -218), config.getInt("matchmaking-spawn.corner2.x", 219));
@@ -267,6 +271,7 @@ public final class DuelService {
         arenaMapService.promoteSavedMaps(arenaTerrainService::hasSnapshot);
         mapOptions = arenaMapService.options();
         arena = loadArena(config);
+        spectatorManager.reload(config);
     }
 
     public DuelRuntimeState runtimeState() {
@@ -324,12 +329,21 @@ public final class DuelService {
     }
 
     public boolean consumeTeleportAllowance(UUID playerId, Location destination) {
-        TeleportAllowance allowance = teleportAllowances.remove(playerId);
+        if (spectatorManager.isActiveWatcher(playerId)) {
+            return spectatorManager.consumeTeleportAllowance(playerId, destination);
+        }
+        if (spectatorManager.consumeTeleportAllowance(playerId, destination)) {
+            return true;
+        }
+        TypedTeleportAllowance allowance = teleportAllowances.remove(playerId);
         return allowance != null && allowance.matches(destination, System.currentTimeMillis());
     }
 
     public void startBuilder(Player sender, Player target) {
         requirePrimaryThread();
+        if (!requirePermission(sender, PermissionPolicy.CHALLENGE)) {
+            return;
+        }
         if (rejectBuilderStart(sender, target)) {
             return;
         }
@@ -389,6 +403,9 @@ public final class DuelService {
 
     public void sendRequest(Player requester) {
         requirePrimaryThread();
+        if (!requirePermission(requester, PermissionPolicy.CHALLENGE)) {
+            return;
+        }
         BuilderSession builder = builders.get(requester.getUniqueId());
         if (builder == null) {
             sendMessage(requester, "messages.no-builder");
@@ -473,6 +490,9 @@ public final class DuelService {
 
     public void acceptRequest(Player target) {
         requirePrimaryThread();
+        if (!requirePermission(target, PermissionPolicy.ACCEPT)) {
+            return;
+        }
         if (pendingRequest == null || !pendingRequest.targetId().equals(target.getUniqueId())) {
             sendMessage(target, MSG_NO_PENDING_REQUEST);
             return;
@@ -482,6 +502,9 @@ public final class DuelService {
 
     public void confirmAcceptRequest(Player target) {
         requirePrimaryThread();
+        if (!requirePermission(target, PermissionPolicy.ACCEPT)) {
+            return;
+        }
         Player requester = acceptRequester(target);
         if (requester == null) {
             return;
@@ -576,6 +599,9 @@ public final class DuelService {
 
     public void denyRequest(Player target) {
         requirePrimaryThread();
+        if (!requirePermission(target, PermissionPolicy.DENY)) {
+            return;
+        }
         if (pendingRequest == null || !pendingRequest.targetId().equals(target.getUniqueId())) {
             sendMessage(target, MSG_NO_PENDING_REQUEST);
             return;
@@ -589,6 +615,9 @@ public final class DuelService {
 
     public void requestDraw(Player player) {
         requirePrimaryThread();
+        if (!requirePermission(player, PermissionPolicy.DRAW)) {
+            return;
+        }
         if (queuedDuelStart != null && queuedDuelStart.involves(player.getUniqueId())) {
             Player requester = Bukkit.getPlayer(queuedDuelStart.requesterId());
             Player target = Bukkit.getPlayer(queuedDuelStart.targetId());
@@ -620,6 +649,9 @@ public final class DuelService {
     }
 
     public void showSettings(Player player) {
+        if (!requirePermission(player, PermissionPolicy.INFO)) {
+            return;
+        }
         if (activeDuel == null) {
             sendMessage(player, "messages.settings-none");
             return;
@@ -629,6 +661,14 @@ public final class DuelService {
 
     public void watchDuel(Player player) {
         requirePrimaryThread();
+        if (spectatorManager.isActiveWatcher(player.getUniqueId())) {
+            spectatorManager.restore(player, "watch-toggle", true);
+            return;
+        }
+        if (!player.hasPermission(PermissionPolicy.SPECTATE)) {
+            sendMessage(player, "messages.no-spectate-permission");
+            return;
+        }
         if (activeDuel == null) {
             sendMessageOrFallback(player, "messages.duel-watch-unavailable", ChatColor.RED + "There is no active duel to watch.");
             return;
@@ -637,21 +677,28 @@ public final class DuelService {
             sendMessageOrFallback(player, "messages.duel-watch-participant", ChatColor.RED + "You are already participating in this duel.");
             return;
         }
-        if (blockCombatEntry && isCombatTagged(player)) {
+        if (blockCombatEntry && isCombatTagged(player) && !player.hasPermission(PermissionPolicy.BYPASS_COMBAT_ENTRY)) {
             sendMessage(player, "messages.arena-combat-entry-blocked");
             return;
         }
-        watchedSpectators.putIfAbsent(player.getUniqueId(), player.getGameMode());
-        enableSpectatorDebugProtection();
-        player.setGameMode(GameMode.SPECTATOR);
-        player.setSpectatorTarget(null);
-        teleportSafe(player, arena.spectator());
-        startContainmentMonitor();
-        sendMessageOrFallback(player, "messages.duel-watch-teleported", ChatColor.GREEN + "Warped to the arena stands.");
+        if (builders.containsKey(player.getUniqueId())
+            || pendingRequest != null && (pendingRequest.requesterId().equals(player.getUniqueId()) || pendingRequest.targetId().equals(player.getUniqueId()))
+            || queuedDuelStart != null && queuedDuelStart.involves(player.getUniqueId())) {
+            sendMessageOrFallback(player, "messages.duel-watch-incompatible", ChatColor.RED + "Finish or cancel your current duel setup before watching.");
+            return;
+        }
+        spectatorManager.enter(player);
+    }
+
+    public boolean leaveWatchMode(Player player, String reason, boolean notify) {
+        return spectatorManager.restore(player, reason, notify);
     }
 
     public void reloadFromCommand(CommandSender sender) {
         requirePrimaryThread();
+        if (!requirePermission(sender, PermissionPolicy.ADMIN_RELOAD)) {
+            return;
+        }
         if (arenaTerrainService.isBusy()) {
             sendMessageRaw(sender, prefix + ChatColor.RED + "Arena terrain is busy. Wait for the current map operation to finish first.");
             return;
@@ -665,6 +712,9 @@ public final class DuelService {
 
     public void saveMapSnapshot(CommandSender sender, String rawMapId) {
         requirePrimaryThread();
+        if (!requirePermission(sender, PermissionPolicy.ADMIN_MAP_SAVE)) {
+            return;
+        }
         if (activeDuel != null || pendingRequest != null || queuedDuelStart != null) {
             sendMessageRaw(sender, prefix + ChatColor.RED + "You cannot save arena maps while a duel is active or pending.");
             return;
@@ -686,6 +736,9 @@ public final class DuelService {
 
     public void loadMapSnapshot(CommandSender sender, String rawMapId) {
         requirePrimaryThread();
+        if (!requirePermission(sender, PermissionPolicy.ADMIN_MAP_LOAD)) {
+            return;
+        }
         if (activeDuel != null || pendingRequest != null || queuedDuelStart != null) {
             sendMessageRaw(sender, prefix + ChatColor.RED + "You cannot load arena maps while a duel is active or pending.");
             return;
@@ -703,6 +756,9 @@ public final class DuelService {
     }
 
     public void showMapStatus(CommandSender sender) {
+        if (!requirePermission(sender, PermissionPolicy.ADMIN_MAP_STATUS)) {
+            return;
+        }
         ArenaMapOperationStatus status = arenaTerrainService.status();
         if (!status.busy()) {
             sendMessageRaw(sender, prefix + ChatColor.YELLOW + "Arena terrain idle. Current map: " + ChatColor.WHITE + arenaMapService.currentArenaMapId());
@@ -717,6 +773,9 @@ public final class DuelService {
 
     public void restoreLatestLoadout(CommandSender sender, Player target) {
         requirePrimaryThread();
+        if (!requirePermission(sender, PermissionPolicy.ADMIN_RESTORE_LOADOUT)) {
+            return;
+        }
         LoadoutSnapshot snapshot = loadoutArchiveStore.loadLatestPreDuel(target.getUniqueId());
         if (snapshot == null) {
             sendMessageRaw(sender, prefix + ChatColor.RED + "No archived pre-duel loadout exists for " + target.getName() + ".");
@@ -728,6 +787,9 @@ public final class DuelService {
 
     public void handleQuit(Player player) {
         requirePrimaryThread();
+        if (spectatorManager.isActiveWatcher(player.getUniqueId()) || spectatorManager.hasRecoverableSession(player.getUniqueId())) {
+            spectatorManager.restore(player, "player-quit", false);
+        }
         builders.remove(player.getUniqueId());
         if (queuedDuelStart != null && queuedDuelStart.involves(player.getUniqueId())) {
             Player requester = Bukkit.getPlayer(queuedDuelStart.requesterId());
@@ -761,14 +823,10 @@ public final class DuelService {
 
     public void handleJoin(Player player) {
         requirePrimaryThread();
-        GameMode watchedMode = watchedSpectators.remove(player.getUniqueId());
-        if (watchedMode != null) {
-            if (player.getGameMode() == GameMode.SPECTATOR) {
-                player.setGameMode(watchedMode);
-            }
-            teleportToExit(player);
+        if (!spectatorManager.recoverOnJoin(player)) {
             return;
         }
+        spectatorManager.handleViewerJoin(player);
         if (spoilsService.prepareForcedDeathIfPending(player)) {
             pendingForcedDeathIds.add(player.getUniqueId());
             Bukkit.getScheduler().runTask(plugin, () -> {
@@ -808,6 +866,14 @@ public final class DuelService {
     public void handleRespawn(PlayerRespawnEvent event) {
         requirePrimaryThread();
         UUID playerId = event.getPlayer().getUniqueId();
+        if (spectatorManager.hasRecoverableSession(playerId)) {
+            Location location = exitLocation();
+            if (location != null) {
+                event.setRespawnLocation(location);
+            }
+            Bukkit.getScheduler().runTask(plugin, () -> spectatorManager.restore(event.getPlayer(), "unexpected-watcher-death", false));
+            return;
+        }
         if (respawnToSpawn.remove(playerId) || recoveryTeleportIds.contains(playerId)) {
             Location location = exitLocation();
             if (location != null) {
@@ -844,14 +910,11 @@ public final class DuelService {
         sendArenaExitBlockedMessage(player);
     }
 
-    public void handleWatchedSpectatorExitAttempt(Player player) {
+    public void handleKick(Player player) {
         requirePrimaryThread();
-        if (player == null || arena == null || !isWatchedSpectator(player.getUniqueId())) {
-            return;
+        if (spectatorManager.isActiveWatcher(player.getUniqueId()) || spectatorManager.hasRecoverableSession(player.getUniqueId())) {
+            spectatorManager.restore(player, "player-kick", false);
         }
-        player.setVelocity(player.getVelocity().zero());
-        teleportSafe(player, arena.spectator());
-        sendArenaExitBlockedMessage(player);
     }
 
     public void handleUnauthorizedArenaEntry(Player player) {
@@ -882,31 +945,43 @@ public final class DuelService {
         return false;
     }
 
-    public boolean isWatchedSpectator(UUID playerId) {
-        return playerId != null && watchedSpectators.containsKey(playerId);
+    public boolean isActiveWatcher(UUID playerId) {
+        return spectatorManager.isActiveWatcher(playerId);
     }
 
-    public boolean isWatchedSpectatorCommandBlocked(Player player) {
-        return player != null
-            && isWatchedSpectator(player.getUniqueId());
+    public boolean shouldBlockWatcherAction(Player player) {
+        return spectatorManager.shouldBlockAction(player);
     }
 
-    public boolean isWatchedSpectatorTeleportBlocked(Player player, Location to, org.bukkit.event.player.PlayerTeleportEvent.TeleportCause cause) {
-        if (player == null || !isWatchedSpectator(player.getUniqueId())) {
+    public boolean isAllowedCommandForWatcher(String rawCommand) {
+        return spectatorManager.isAllowedCommand(rawCommand);
+    }
+
+    public boolean shouldBlockWatcherTeleport(Player player) {
+        return spectatorManager.shouldBlockTeleport(player);
+    }
+
+    public void enforceWatcherState(Player player) {
+        spectatorManager.enforce(player);
+    }
+
+    public void sendWatcherActionBlocked(Player player) {
+        spectatorManager.sendActionBlocked(player);
+    }
+
+    public void sendWatcherTeleportBlocked(Player player) {
+        spectatorManager.sendTeleportBlocked(player);
+    }
+
+    public boolean recoverWatcher(Player administrator, Player target) {
+        if (!requirePermission(administrator, PermissionPolicy.ADMIN_RECOVER_WATCHER)) {
             return false;
         }
-        if (cause == org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.SPECTATE) {
-            return true;
-        }
-        return arena == null || to == null || !arena.contains(to);
+        return spectatorManager.recoverByAdmin(administrator, target);
     }
 
-    public boolean isWatchedSpectatorLeaving(Player player, Location to) {
-        return player != null
-            && to != null
-            && isWatchedSpectator(player.getUniqueId())
-            && arena != null
-            && !arena.contains(to);
+    public boolean hasRecoverableWatcherSession(UUID playerId) {
+        return spectatorManager.hasRecoverableSession(playerId);
     }
 
     public boolean isBlockBreakAllowed(Block block, Player player) {
@@ -931,7 +1006,7 @@ public final class DuelService {
     }
 
     private boolean hasBuildBypass(Player player) {
-        return player != null && player.hasPermission(PERMISSION_BYPASS_BUILD);
+        return player != null && player.hasPermission(PermissionPolicy.BYPASS_BUILD);
     }
 
     private boolean isIdleArenaBlock(Location location) {
@@ -1086,7 +1161,7 @@ public final class DuelService {
         if (arena == null || location == null || !arena.contains(location)) {
             return false;
         }
-        if (player != null && player.hasPermission("warzoneduels.bypass.build")) {
+        if (player != null && player.hasPermission(PermissionPolicy.BYPASS_BUILD)) {
             return false;
         }
         if (activeDuel == null) {
@@ -1102,7 +1177,7 @@ public final class DuelService {
         if (!blockCombatEntry || player == null || combatTagPort == null || arena == null || to == null) {
             return false;
         }
-        if (isInActiveDuel(player.getUniqueId()) || player.hasPermission(PERMISSION_BYPASS_ENTER)) {
+        if (isInActiveDuel(player.getUniqueId()) || player.hasPermission(PermissionPolicy.BYPASS_COMBAT_ENTRY)) {
             return false;
         }
         if (!arena.contains(to) || (from != null && arena.contains(from))) {
@@ -1115,7 +1190,7 @@ public final class DuelService {
         if (player == null || arena == null || to == null) {
             return false;
         }
-        if (isInActiveDuel(player.getUniqueId()) || player.hasPermission(PERMISSION_BYPASS_ENTER)) {
+        if (isInActiveDuel(player.getUniqueId()) || player.hasPermission(PermissionPolicy.BYPASS_ARENA_ENTRY)) {
             return false;
         }
         return arenaTerrainService.isOnOrInsideFootprintBlock(to);
@@ -1342,8 +1417,18 @@ public final class DuelService {
         return null;
     }
 
-    public void updateArenaLocation(String key, Location location) {
+    public void updateArenaLocation(Player actor, String key, Location location) {
         requirePrimaryThread();
+        String permission = switch (key) {
+            case "setpos1", "setpos2" -> PermissionPolicy.ADMIN_ARENA_SET_POS;
+            case "setspawn1", "setspawn2" -> PermissionPolicy.ADMIN_ARENA_SET_SPAWN;
+            case "setspectator" -> PermissionPolicy.ADMIN_ARENA_SET_SPECTATOR;
+            case "setexit" -> PermissionPolicy.ADMIN_ARENA_SET_EXIT;
+            default -> "";
+        };
+        if (permission.isBlank() || !requirePermission(actor, permission)) {
+            return;
+        }
         FileConfiguration config = plugin.getConfig();
         config.set("arena.world", location.getWorld() == null ? "world" : location.getWorld().getName());
         String value = location.getBlockX() + "," + location.getBlockY() + "," + location.getBlockZ();
@@ -1360,14 +1445,6 @@ public final class DuelService {
         }
         plugin.saveConfig();
         reloadConfig();
-    }
-
-    public Collection<String> commandSuggestions() {
-        return List.of(
-            "accept", "deny", "review", "watch", "spectate", "stands", "draw", "surrender", "cancel", "vault", "stats", "info", "settings",
-            "reload", "restoreloadout", "mapsave", "mapload", "mapstatus",
-            "setpos1", "setpos2", "setspawn1", "setspawn2", "setspectator", "setexit"
-        );
     }
 
     public PlayerDuelStats stats(UUID playerId, String playerName) {
@@ -1573,7 +1650,7 @@ public final class DuelService {
         cancelVictoryTask();
         cancelContainmentTask();
         rebuildParticipantIndex();
-        clearWatchedSpectators(true);
+        spectatorManager.restoreAllOnline("duel-ended");
         cleanupArenaAfterMatch(finishedDuel, true);
     }
 
@@ -1587,49 +1664,6 @@ public final class DuelService {
                 teleportToExit(player);
             }
         }
-    }
-
-    private void clearWatchedSpectators(boolean teleportOut) {
-        if (watchedSpectators.isEmpty()) {
-            restoreSpectatorDebugProtection();
-            return;
-        }
-        Map<UUID, GameMode> previousModes = Map.copyOf(watchedSpectators);
-        for (Map.Entry<UUID, GameMode> entry : previousModes.entrySet()) {
-            watchedSpectators.remove(entry.getKey());
-            Player player = Bukkit.getPlayer(entry.getKey());
-            if (player == null || !player.isOnline()) {
-                continue;
-            }
-            GameMode previousMode = entry.getValue() == null ? GameMode.SURVIVAL : entry.getValue();
-            if (player.getGameMode() == GameMode.SPECTATOR) {
-                player.setGameMode(previousMode);
-            }
-            if (teleportOut && !player.isDead()) {
-                teleportToExit(player);
-            }
-        }
-        restoreSpectatorDebugProtection();
-    }
-
-    private void enableSpectatorDebugProtection() {
-        if (!spectatorReducedDebugInfo || arena == null || arena.spectator().getWorld() == null) {
-            return;
-        }
-        World world = arena.spectator().getWorld();
-        if (previousReducedDebugInfo == null) {
-            previousReducedDebugInfo = world.getGameRuleValue(GameRule.REDUCED_DEBUG_INFO);
-        }
-        world.setGameRule(GameRule.REDUCED_DEBUG_INFO, true);
-    }
-
-    private void restoreSpectatorDebugProtection() {
-        if (previousReducedDebugInfo == null || arena == null || arena.spectator().getWorld() == null) {
-            previousReducedDebugInfo = null;
-            return;
-        }
-        arena.spectator().getWorld().setGameRule(GameRule.REDUCED_DEBUG_INFO, previousReducedDebugInfo);
-        previousReducedDebugInfo = null;
     }
 
     private void startVictoryMoment(ActiveDuel finishedDuel, Player winner) {
@@ -1840,18 +1874,16 @@ public final class DuelService {
     }
 
     private void startContainmentMonitor() {
-        if ((activeDuel == null && watchedSpectators.isEmpty()) || containmentTask != null) {
+        if (activeDuel == null || containmentTask != null) {
             return;
         }
         containmentTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             if (activeDuel == null) {
-                clearWatchedSpectators(true);
                 cancelContainmentTask();
                 return;
             }
             enforceParticipantContainment(activeDuel.participantOne().playerId());
             enforceParticipantContainment(activeDuel.participantTwo().playerId());
-            enforceWatchedSpectatorContainment();
         }, 5L, 5L);
     }
 
@@ -1862,31 +1894,6 @@ public final class DuelService {
         }
         if (!isParticipantInsideAllowedArena(player.getLocation())) {
             handleArenaExitAttempt(player);
-        }
-    }
-
-    private void enforceWatchedSpectatorContainment() {
-        if (watchedSpectators.isEmpty() || arena == null) {
-            return;
-        }
-        for (UUID playerId : List.copyOf(watchedSpectators.keySet())) {
-            Player player = Bukkit.getPlayer(playerId);
-            if (player == null || !player.isOnline()) {
-                watchedSpectators.remove(playerId);
-                continue;
-            }
-            if (player.getGameMode() != GameMode.SPECTATOR) {
-                player.setGameMode(GameMode.SPECTATOR);
-            }
-            if (player.getSpectatorTarget() != null) {
-                player.setSpectatorTarget(null);
-            }
-            if (!arena.contains(player.getLocation())) {
-                handleWatchedSpectatorExitAttempt(player);
-            }
-        }
-        if (watchedSpectators.isEmpty()) {
-            restoreSpectatorDebugProtection();
         }
     }
 
@@ -2041,6 +2048,25 @@ public final class DuelService {
         sendMessageRaw(player, color(message));
     }
 
+    private boolean requirePermission(CommandSender sender, String permission) {
+        if (sender != null && sender.hasPermission(permission)) {
+            return true;
+        }
+        if (sender instanceof Player player) {
+            sendMessage(player, "messages.no-permission");
+        } else if (sender != null) {
+            sendMessageRaw(sender, prefix + color(plugin.getConfig().getString("messages.no-permission", "&cYou do not have permission.")));
+        }
+        return false;
+    }
+
+    private Set<UUID> activeParticipantIds() {
+        if (activeDuel == null) {
+            return Set.of();
+        }
+        return Set.of(activeDuel.participantOne().playerId(), activeDuel.participantTwo().playerId());
+    }
+
     private void sendMessageOrFallback(Player player, String path, String fallback) {
         if (player == null) {
             return;
@@ -2126,6 +2152,9 @@ public final class DuelService {
             if (player.getUniqueId().equals(participantOne) || player.getUniqueId().equals(participantTwo)) {
                 continue;
             }
+            if (!player.hasPermission(PermissionPolicy.SPECTATE)) {
+                continue;
+            }
             player.sendMessage(component);
         }
     }
@@ -2138,7 +2167,11 @@ public final class DuelService {
         if (player == null || location == null || location.getWorld() == null) {
             return;
         }
-        TeleportAllowance allowance = TeleportAllowance.forDestination(location, System.currentTimeMillis() + 2000L);
+        TypedTeleportAllowance allowance = TypedTeleportAllowance.forDestination(
+            TeleportAllowanceReason.DUEL_MOVEMENT,
+            location,
+            System.currentTimeMillis() + 2000L
+        );
         teleportAllowances.put(player.getUniqueId(), allowance);
         if (!player.teleport(location)) {
             teleportAllowances.remove(player.getUniqueId(), allowance);
@@ -2403,31 +2436,6 @@ public final class DuelService {
     ) {
         private boolean involves(UUID playerId) {
             return requesterId.equals(playerId) || targetId.equals(playerId);
-        }
-    }
-
-    private record TeleportAllowance(UUID worldId, double x, double y, double z, long expiresAtEpochMs) {
-        private static TeleportAllowance forDestination(Location destination, long expiresAtEpochMs) {
-            return new TeleportAllowance(
-                destination.getWorld().getUID(),
-                destination.getX(),
-                destination.getY(),
-                destination.getZ(),
-                expiresAtEpochMs
-            );
-        }
-
-        private boolean matches(Location destination, long nowEpochMs) {
-            if (destination == null || destination.getWorld() == null || nowEpochMs > expiresAtEpochMs) {
-                return false;
-            }
-            if (!worldId.equals(destination.getWorld().getUID())) {
-                return false;
-            }
-            double deltaX = x - destination.getX();
-            double deltaY = y - destination.getY();
-            double deltaZ = z - destination.getZ();
-            return (deltaX * deltaX) + (deltaY * deltaY) + (deltaZ * deltaZ) <= 0.01D;
         }
     }
 

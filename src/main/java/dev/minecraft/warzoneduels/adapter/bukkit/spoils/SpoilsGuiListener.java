@@ -2,11 +2,14 @@ package dev.minecraft.warzoneduels.adapter.bukkit.spoils;
 
 import dev.minecraft.warzoneduels.app.SpoilsService;
 import dev.minecraft.warzoneduels.domain.spoils.SpoilsEntry;
+import dev.minecraft.warzoneduels.permission.PermissionMessages;
+import dev.minecraft.warzoneduels.permission.PermissionPolicy;
 import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.List;
 import java.util.UUID;
@@ -23,8 +26,10 @@ public final class SpoilsGuiListener implements Listener {
     private static final int SLOT_DETAIL_DELETE_REMAINING = 51;
 
     private final SpoilsService spoilsService;
+    private final JavaPlugin plugin;
 
-    public SpoilsGuiListener(SpoilsService spoilsService) {
+    public SpoilsGuiListener(JavaPlugin plugin, SpoilsService spoilsService) {
+        this.plugin = plugin;
         this.spoilsService = spoilsService;
     }
 
@@ -34,6 +39,12 @@ public final class SpoilsGuiListener implements Listener {
             return;
         }
         if (!(event.getInventory().getHolder() instanceof AbstractSpoilsHolder holder)) {
+            return;
+        }
+        if (!player.hasPermission(PermissionPolicy.VAULT)) {
+            event.setCancelled(true);
+            player.closeInventory();
+            PermissionMessages.sendNoPermission(plugin, player);
             return;
         }
         if (!holder.ownerId().equals(player.getUniqueId())) {

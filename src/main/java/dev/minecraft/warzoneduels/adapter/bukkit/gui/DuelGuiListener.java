@@ -4,6 +4,7 @@ import dev.minecraft.warzoneduels.app.DuelService;
 import dev.minecraft.warzoneduels.domain.BuilderSession;
 import dev.minecraft.warzoneduels.domain.DuelMapOption;
 import dev.minecraft.warzoneduels.domain.DuelSettings;
+import dev.minecraft.warzoneduels.permission.PermissionPolicy;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
@@ -85,6 +86,12 @@ public final class DuelGuiListener implements Listener {
             return;
         }
         event.setCancelled(true);
+        if (!event.getPlayer().hasPermission(PermissionPolicy.CHALLENGE)) {
+            awaitingWagerInput.remove(playerId);
+            duelService.clearBuilder(playerId);
+            Bukkit.getScheduler().runTask(duelService.plugin(), () -> duelService.sendMessage(event.getPlayer(), "messages.no-permission"));
+            return;
+        }
         String input = PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
         Bukkit.getScheduler().runTask(duelService.plugin(), () -> applyCustomWager(event.getPlayer(), input));
     }
@@ -112,6 +119,13 @@ public final class DuelGuiListener implements Listener {
             }
             default -> {
             }
+        }
+
+        if (!player.hasPermission(PermissionPolicy.CHALLENGE)) {
+            duelService.clearBuilder(player.getUniqueId());
+            player.closeInventory();
+            duelService.sendMessage(player, "messages.no-permission");
+            return;
         }
 
         BuilderSession builder = duelService.getBuilder(player.getUniqueId());

@@ -2,10 +2,13 @@ package dev.minecraft.warzoneduels.adapter.bukkit.stats;
 
 import dev.minecraft.warzoneduels.app.StatsService;
 import dev.minecraft.warzoneduels.domain.stats.PlayerDuelStats;
+import dev.minecraft.warzoneduels.permission.PermissionMessages;
+import dev.minecraft.warzoneduels.permission.PermissionPolicy;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.List;
 import java.util.UUID;
@@ -21,8 +24,10 @@ public final class StatsGuiListener implements Listener {
 
     private final StatsService statsService;
     private final PlayerHeadCache headCache;
+    private final JavaPlugin plugin;
 
-    public StatsGuiListener(StatsService statsService, PlayerHeadCache headCache) {
+    public StatsGuiListener(JavaPlugin plugin, StatsService statsService, PlayerHeadCache headCache) {
+        this.plugin = plugin;
         this.statsService = statsService;
         this.headCache = headCache;
     }
@@ -36,6 +41,14 @@ public final class StatsGuiListener implements Listener {
             return;
         }
         event.setCancelled(true);
+        boolean viewingOthers = holder.type() == StatsGuiType.LEADERBOARD
+            || holder.targetPlayerId() != null && !holder.targetPlayerId().equals(player.getUniqueId());
+        String requiredPermission = viewingOthers ? PermissionPolicy.STATS_OTHERS : PermissionPolicy.STATS_SELF;
+        if (!player.hasPermission(requiredPermission)) {
+            player.closeInventory();
+            PermissionMessages.sendNoPermission(plugin, player);
+            return;
+        }
         switch (holder.type()) {
             case PROFILE -> handleProfile(player, holder, event.getRawSlot());
             case LEADERBOARD -> handleLeaderboard(player, holder, event.getRawSlot());
@@ -44,6 +57,9 @@ public final class StatsGuiListener implements Listener {
 
     private void handleProfile(Player player, StatsGuiHolder holder, int slot) {
         if (slot == SLOT_PROFILE_LEADERBOARD) {
+            if (!requireOthers(player)) {
+                return;
+            }
             player.openInventory(StatsGuiFactory.buildLeaderboard(statsService.topByWins(0, PAGE_SIZE), headCache, 0, holder.targetPlayerId()));
             return;
         }
@@ -53,6 +69,10 @@ public final class StatsGuiListener implements Listener {
     }
 
     private void handleLeaderboard(Player player, StatsGuiHolder holder, int slot) {
+        if (!requireOthers(player)) {
+            player.closeInventory();
+            return;
+        }
         int page = holder.page();
         if (slot == SLOT_LEADERBOARD_PROFILE) {
             openCurrentProfile(player, holder);
@@ -102,5 +122,13 @@ public final class StatsGuiListener implements Listener {
             player.openInventory(StatsGuiFactory.buildProfile(entries.get(i), headCache));
             return;
         }
+    }
+
+    private boolean requireOthers(Player player) {
+        if (player.hasPermission(PermissionPolicy.STATS_OTHERS)) {
+            return true;
+        }
+        PermissionMessages.sendNoPermission(plugin, player);
+        return false;
     }
 }

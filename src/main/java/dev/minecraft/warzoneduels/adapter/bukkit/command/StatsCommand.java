@@ -4,12 +4,15 @@ import dev.minecraft.warzoneduels.app.StatsService;
 import dev.minecraft.warzoneduels.adapter.bukkit.stats.PlayerHeadCache;
 import dev.minecraft.warzoneduels.adapter.bukkit.stats.StatsGuiFactory;
 import dev.minecraft.warzoneduels.domain.stats.PlayerDuelStats;
+import dev.minecraft.warzoneduels.permission.PermissionMessages;
+import dev.minecraft.warzoneduels.permission.PermissionPolicy;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -19,8 +22,10 @@ import java.util.Locale;
 public final class StatsCommand implements CommandExecutor, TabCompleter {
     private final StatsService statsService;
     private final PlayerHeadCache headCache;
+    private final JavaPlugin plugin;
 
-    public StatsCommand(StatsService statsService, PlayerHeadCache headCache) {
+    public StatsCommand(JavaPlugin plugin, StatsService statsService, PlayerHeadCache headCache) {
+        this.plugin = plugin;
         this.statsService = statsService;
         this.headCache = headCache;
     }
@@ -29,12 +34,20 @@ public final class StatsCommand implements CommandExecutor, TabCompleter {
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         PlayerDuelStats stats;
         if (args.length == 0) {
+            if (!sender.hasPermission(PermissionPolicy.STATS_SELF)) {
+                PermissionMessages.sendNoPermission(plugin, sender);
+                return true;
+            }
             if (!(sender instanceof Player player)) {
                 sender.sendMessage(ChatColor.RED + "Usage: /stats <player>");
                 return true;
             }
             stats = statsService.stats(player.getUniqueId(), player.getName());
         } else {
+            if (!sender.hasPermission(PermissionPolicy.STATS_OTHERS)) {
+                PermissionMessages.sendNoPermission(plugin, sender);
+                return true;
+            }
             stats = statsService.findByNameOrOffline(args[0]);
             if (stats == null) {
                 sender.sendMessage(ChatColor.RED + "No duel stats found for " + args[0] + ".");
@@ -61,7 +74,7 @@ public final class StatsCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        if (args.length != 1) {
+        if (args.length != 1 || !sender.hasPermission(PermissionPolicy.STATS_OTHERS)) {
             return List.of();
         }
         String typed = args[0].toLowerCase(Locale.ROOT);
