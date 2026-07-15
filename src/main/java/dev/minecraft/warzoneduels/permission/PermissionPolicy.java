@@ -6,20 +6,21 @@ import java.util.Map;
 import java.util.function.Predicate;
 
 public final class PermissionPolicy {
-    public static final String USER = "warzoneduels.user";
+    public static final String COMMAND = "warzoneduels.command";
     public static final String ADMIN = "warzoneduels.admin";
     public static final String COMMAND_DUEL = "warzoneduels.command.duel";
-    public static final String CHALLENGE = "warzoneduels.challenge";
-    public static final String ACCEPT = "warzoneduels.accept";
-    public static final String DENY = "warzoneduels.deny";
-    public static final String REVIEW = "warzoneduels.review";
+    public static final String CHALLENGE = "warzoneduels.command.challenge";
+    public static final String ACCEPT = "warzoneduels.command.accept";
+    public static final String DENY = "warzoneduels.command.deny";
+    public static final String REVIEW = "warzoneduels.command.review";
     public static final String SPECTATE = "warzoneduels.spectate";
+    public static final String SPECTATE_USE = "warzoneduels.spectate.use";
     public static final String SPECTATE_LEAVE = "warzoneduels.spectate.leave";
-    public static final String DRAW = "warzoneduels.draw";
-    public static final String VAULT = "warzoneduels.vault";
-    public static final String STATS_SELF = "warzoneduels.stats.self";
-    public static final String STATS_OTHERS = "warzoneduels.stats.others";
-    public static final String INFO = "warzoneduels.info";
+    public static final String DRAW = "warzoneduels.command.draw";
+    public static final String VAULT = "warzoneduels.command.vault";
+    public static final String STATS_SELF = "warzoneduels.command.stats";
+    public static final String STATS_OTHERS = "warzoneduels.command.stats.others";
+    public static final String INFO = "warzoneduels.command.info";
     public static final String ADMIN_RELOAD = "warzoneduels.admin.reload";
     public static final String ADMIN_RESTORE_LOADOUT = "warzoneduels.admin.restoreloadout";
     public static final String ADMIN_MAP_SAVE = "warzoneduels.admin.map.save";
@@ -30,10 +31,9 @@ public final class PermissionPolicy {
     public static final String ADMIN_ARENA_SET_SPECTATOR = "warzoneduels.admin.arena.setspectator";
     public static final String ADMIN_ARENA_SET_EXIT = "warzoneduels.admin.arena.setexit";
     public static final String ADMIN_RECOVER_WATCHER = "warzoneduels.admin.recoverwatcher";
-    public static final String BYPASS_BUILD = "warzoneduels.bypass.build";
-    public static final String BYPASS_ARENA_ENTRY = "warzoneduels.bypass.arena-entry";
-    public static final String BYPASS_COMBAT_ENTRY = "warzoneduels.bypass.combat-entry";
-    public static final String BYPASS_ENTER_LEGACY = "warzoneduels.bypass.enter";
+    public static final String BYPASS_BUILD = "warzoneduels.admin.bypass.build";
+    public static final String BYPASS_ARENA_ENTRY = "warzoneduels.admin.bypass.arena";
+    public static final String BYPASS_COMBAT_ENTRY = "warzoneduels.admin.bypass.combat";
 
     private static final Map<String, String> SUBCOMMAND_PERMISSIONS = buildSubcommandPermissions();
     private static final List<String> ROOT_ORDER = List.of(
@@ -51,7 +51,7 @@ public final class PermissionPolicy {
 
     public static List<String> visibleRootSuggestions(Predicate<String> hasPermission, boolean activeWatcher) {
         return ROOT_ORDER.stream()
-            .filter(option -> activeWatcher && (option.equals("leave") || option.equals("unwatch") || option.equals("watch"))
+            .filter(option -> activeWatcher && (option.equals("leave") || option.equals("unwatch"))
                 || hasPermission.test(permissionForSubcommand(option)))
             .toList();
     }
@@ -65,9 +65,9 @@ public final class PermissionPolicy {
         permissions.put("accept", ACCEPT);
         permissions.put("deny", DENY);
         permissions.put("review", REVIEW);
-        permissions.put("watch", SPECTATE);
-        permissions.put("spectate", SPECTATE);
-        permissions.put("stands", SPECTATE);
+        permissions.put("watch", SPECTATE_USE);
+        permissions.put("spectate", SPECTATE_USE);
+        permissions.put("stands", SPECTATE_USE);
         permissions.put("leave", SPECTATE_LEAVE);
         permissions.put("unwatch", SPECTATE_LEAVE);
         permissions.put("draw", DRAW);

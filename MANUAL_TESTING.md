@@ -4,20 +4,20 @@ Run these checks on a non-production Leaf/Fuji server with disposable player dat
 
 ## Permission setup
 
-Ordinary permissions default to `false` while the feature is staged. `warzoneduels.user` grants all ordinary nodes. When the feature is ready for general use, grant `warzoneduels.user` through the server permission manager; do not change individual plugin defaults unless unrestricted access is intended.
+All command and spectator permissions default to `false` while the feature is staged. When the feature is ready for general use, grant both `warzoneduels.command` and `warzoneduels.spectate` through the server permission manager; do not change individual plugin defaults unless unrestricted access is intended.
 
 Test with separate accounts or temporary groups:
 
 - No permissions: `/duel`, `/draw`, `/vault`, and `/stats` expose no usable features or inaccessible tab completions.
-- Only `warzoneduels.challenge`: can run `/duel <player>` and complete/send the GUI, but cannot accept, inspect stats, or watch.
+- Only `warzoneduels.command.challenge`: can run `/duel <player>` and complete/send the GUI, but cannot accept, inspect stats, or watch.
 - Only `warzoneduels.spectate`: can run `/duel watch` during an active duel, but cannot create a challenge.
-- Only `warzoneduels.stats.self`: `/stats` works; `/stats <other>` and leaderboard profile navigation do not.
-- Only `warzoneduels.stats.others`: `/stats <other>` and target completions work; personal `/stats` still requires `stats.self`.
+- Only `warzoneduels.command.stats`: `/stats` works; `/stats <other>` and leaderboard profile navigation do not.
+- Only `warzoneduels.command.stats.others`: `/stats <other>` and target completions work; personal `/stats` still requires `warzoneduels.command.stats`.
 - Grant each individual administrative node without `warzoneduels.admin`; verify only its exact subcommand and completion appears.
-- Verify `warzoneduels.admin` grants ordinary, administrative, build-bypass, arena-entry, and combat-entry behavior.
-- Verify legacy `warzoneduels.bypass.enter` grants both `bypass.arena-entry` and `bypass.combat-entry` behavior.
+- Verify `warzoneduels.admin` grants command, spectator, administrative, build-bypass, arena-entry, and combat-entry behavior.
+- Verify legacy `warzoneduels.bypass.enter` grants both `warzoneduels.admin.bypass.arena` and `warzoneduels.admin.bypass.combat` behavior.
 - Remove a permission while its GUI is open; confirm the final click is denied and no duel, acceptance, vault claim, or stats navigation occurs.
-- Remove `warzoneduels.spectate` and `warzoneduels.spectate.leave` from an active watcher; `/duel leave`, `/duel unwatch`, and `/duel watch` must still restore the player.
+- Remove `warzoneduels.spectate` and `warzoneduels.spectate.leave` from an active watcher; `/duel leave` and `/duel unwatch` must still restore the player.
 
 ## Watch mode entry and visibility
 
@@ -99,4 +99,4 @@ Perform process-kill tests only with backups and disposable player data.
 6. Run entry, visibility, non-interference, external teleport, and boundary checks.
 7. Run normal exit, disconnect, reload, and clean shutdown restoration checks.
 8. Run crash recovery checks on a disposable copy of the server.
-9. Grant `warzoneduels.user` to the intended public group only after every live-server check passes.
+9. Grant `warzoneduels.command` and `warzoneduels.spectate` to the intended public group only after every live-server check passes.

@@ -661,12 +661,12 @@ public final class DuelService {
 
     public void watchDuel(Player player) {
         requirePrimaryThread();
-        if (spectatorManager.isActiveWatcher(player.getUniqueId())) {
-            spectatorManager.restore(player, "watch-toggle", true);
+        if (!player.hasPermission(PermissionPolicy.SPECTATE_USE)) {
+            sendMessage(player, "messages.no-spectate-permission");
             return;
         }
-        if (!player.hasPermission(PermissionPolicy.SPECTATE)) {
-            sendMessage(player, "messages.no-spectate-permission");
+        if (spectatorManager.isActiveWatcher(player.getUniqueId())) {
+            spectatorManager.restore(player, "watch-toggle", true);
             return;
         }
         if (activeDuel == null) {
@@ -2152,7 +2152,7 @@ public final class DuelService {
             if (player.getUniqueId().equals(participantOne) || player.getUniqueId().equals(participantTwo)) {
                 continue;
             }
-            if (!player.hasPermission(PermissionPolicy.SPECTATE)) {
+            if (!player.hasPermission(PermissionPolicy.SPECTATE_USE)) {
                 continue;
             }
             player.sendMessage(component);

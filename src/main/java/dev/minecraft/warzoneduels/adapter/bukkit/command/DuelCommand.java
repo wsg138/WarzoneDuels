@@ -80,7 +80,7 @@ public final class DuelCommand implements CommandExecutor, TabCompleter {
             ? PermissionPolicy.STATS_OTHERS
             : PermissionPolicy.permissionForSubcommand(sub);
         if (permission != null && !player.hasPermission(permission)) {
-            duelService.sendMessage(player, PermissionPolicy.SPECTATE.equals(permission)
+            duelService.sendMessage(player, PermissionPolicy.SPECTATE_USE.equals(permission)
                 ? "messages.no-spectate-permission" : "messages.no-permission");
             return;
         }
@@ -321,6 +321,6 @@ public final class DuelCommand implements CommandExecutor, TabCompleter {
             return false;
         }
         String sub = args[0].toLowerCase(Locale.ROOT);
-        return sub.equals("leave") || sub.equals("unwatch") || sub.equals("watch");
+        return sub.equals("leave") || sub.equals("unwatch");
     }
 }

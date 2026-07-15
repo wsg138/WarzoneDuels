@@ -9,3 +9,9 @@ Death duel plugin with arena setup, loadout restore, vault rewards, stats, and o
 ```powershell
 mvn -q -DskipTests package
 ```
+
+## Permissions
+
+All non-administrative permissions default to `false`. Grant `warzoneduels.command` for ordinary duel commands, `warzoneduels.spectate` for controlled watch mode, or `warzoneduels.admin` for every command, setup action, and administrative bypass. Individual permissions are declared in `plugin.yml` under those three parents for LuckPerms assignment.
+
+The older `warzoneduels.user`, command leaf, and bypass nodes remain as deprecated compatibility aliases. New permission assignments should use the current parent hierarchy.
