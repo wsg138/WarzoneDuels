@@ -14,6 +14,7 @@ import java.util.UUID;
  */
 final class NotBountiesWatcherDisplayHook implements WatcherDisplayHook {
     private static final String PLUGIN_NAME = "NotBounties";
+    private static final String SUPPORTED_VERSION = "dev_1.22.38.1";
     private static final String WANTED_TAGS_CLASS = "me.jadenp.notbounties.features.settings.display.WantedTags";
 
     private final WarzoneDuelsPlugin plugin;
@@ -58,6 +59,12 @@ final class NotBountiesWatcherDisplayHook implements WatcherDisplayHook {
     private boolean resolveMethods() {
         Plugin notBounties = Bukkit.getPluginManager().getPlugin(PLUGIN_NAME);
         if (notBounties == null || !notBounties.isEnabled()) {
+            clearCachedMethods();
+            return false;
+        }
+        if (!SUPPORTED_VERSION.equals(notBounties.getDescription().getVersion())) {
+            plugin.getLogger().fine("NotBounties " + notBounties.getDescription().getVersion()
+                + " is not the verified WantedTags version " + SUPPORTED_VERSION + "; watcher bounty tags are not managed.");
             clearCachedMethods();
             return false;
         }
