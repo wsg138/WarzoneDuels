@@ -47,6 +47,8 @@ public final class SpectatorManager {
     private final Supplier<ArenaDefinition> arenaSupplier;
     private final Supplier<Location> exitSupplier;
     private final NamespacedKey recoveryMarkerKey;
+    private final WatcherTeleportCancellationHook teleportCancellationHook;
+    private final WatcherDisplayManager displayManager;
     private final Map<UUID, SpectatorSession> sessions = new ConcurrentHashMap<>();
     private final Map<UUID, TypedTeleportAllowance> teleportAllowances = new ConcurrentHashMap<>();
     private final Map<UUID, Long> actionMessageCooldowns = new ConcurrentHashMap<>();
@@ -73,6 +75,8 @@ public final class SpectatorManager {
         this.arenaSupplier = arenaSupplier;
         this.exitSupplier = exitSupplier;
         this.recoveryMarkerKey = new NamespacedKey(plugin, "pseudo_spectator_recovery");
+        this.teleportCancellationHook = new WatcherTeleportCancellationHook(plugin);
+        this.displayManager = new WatcherDisplayManager(plugin);
     }
 
     public void reload(FileConfiguration config) {
@@ -121,6 +125,7 @@ public final class SpectatorManager {
             return false;
         }
 
+        teleportCancellationHook.cancelInvolving(playerId);
         player.closeInventory();
         dismount(player);
         SpectatorSession prepared = capture(player);
@@ -143,6 +148,7 @@ public final class SpectatorManager {
                 throw new IllegalStateException("Configured spectator spawn is unavailable or teleport failed");
             }
             applyVisibility(player);
+            displayManager.suppress(player);
             SpectatorSession active = prepared.withPhase(SpectatorSessionPhase.ACTIVE);
             if (!store.save(active)) {
                 throw new IllegalStateException("Failed to persist ACTIVE spectator session phase");
@@ -168,6 +174,7 @@ public final class SpectatorManager {
         }
         if (session == null) {
             forceVisible(player);
+            displayManager.restore(player);
             if (notify) {
                 send(player, "messages.duel-watch-not-watching", "&7You are not currently watching a duel.");
             }
@@ -178,6 +185,7 @@ public final class SpectatorManager {
         boolean phaseSaved = store.save(restoring);
         sessions.put(playerId, restoring);
         forceVisible(player);
+        displayManager.restore(player);
         sessions.remove(playerId);
 
         try {
@@ -315,6 +323,7 @@ public final class SpectatorManager {
         emptyWatcherInventory(player);
         dismount(player);
         applyVisibility(player);
+        displayManager.enforce(player);
         if (!isInsideBoundary(player.getLocation())) {
             returnToBoundary(player);
         }
@@ -369,6 +378,11 @@ public final class SpectatorManager {
 
     public void sendTeleportBlocked(Player player) {
         sendWithCooldown(player, teleportMessageCooldowns, 1_500L, "messages.watcher-teleport-blocked", "&cLeave watch mode before teleporting.");
+    }
+
+    public void sendExternalTeleportIntoActiveDuelBlocked(Player player) {
+        sendWithCooldown(player, teleportMessageCooldowns, 1_500L, "messages.teleport-active-duel-area-blocked",
+            "&cYou cannot teleport into an active duel or spectator area.");
     }
 
     private SpectatorSession capture(Player player) {
@@ -556,6 +570,7 @@ public final class SpectatorManager {
 
     private boolean applyMissingSessionFallback(Player player) {
         forceVisible(player);
+        displayManager.restore(player);
         if (player.getGameMode() == GameMode.SPECTATOR) {
             player.setGameMode(GameMode.SURVIVAL);
         }

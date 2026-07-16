@@ -17,6 +17,8 @@
         <h2.version>2.2.224</h2.version>
         <junit.version>5.11.4</junit.version>
         <sirblobman.core.version>2.9-20251215.173206-57</sirblobman.core.version>
+        <enthusia.teleport.version>1.2.6</enthusia.teleport.version>
+        <enthusia.tags.version>2.1.0</enthusia.tags.version>
     </properties>
 
     <repositories>
@@ -39,6 +41,18 @@
             <groupId>io.papermc.paper</groupId>
             <artifactId>paper-api</artifactId>
             <version>1.21.11-R0.1-SNAPSHOT</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.enthusia</groupId>
+            <artifactId>enthusia-teleport</artifactId>
+            <version>${enthusia.teleport.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.enthusia</groupId>
+            <artifactId>EnthusiaTags</artifactId>
+            <version>${enthusia.tags.version}</version>
             <scope>provided</scope>
         </dependency>
         <dependency>

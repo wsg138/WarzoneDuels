@@ -39,6 +39,7 @@ messages:
   no-spectate-permission: "&cYou do not have permission to watch duels."
   watcher-action-blocked: "&cYou cannot do that while watching a duel."
   watcher-teleport-blocked: "&cLeave watch mode before teleporting."
+  teleport-active-duel-area-blocked: "&cYou cannot teleport into an active duel or spectator area."
   watcher-boundary-return: "&eYou were returned to the spectator area."
   watcher-state-recovered: "&aYour unfinished watcher session was safely recovered."
   watcher-recovery-failure: "&cYour watcher state could not be fully recovered. Staff have been notified."

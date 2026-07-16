@@ -10,6 +10,13 @@ Death duel plugin with arena setup, loadout restore, vault rewards, stats, and o
 mvn -q -DskipTests package
 ```
 
+For the optional EnthusiaTeleport and EnthusiaTags service integrations, install those two sibling projects into the local Maven repository first:
+
+```powershell
+Push-Location ..\EnthusiaTeleport; mvn -q -DskipTests install; Pop-Location
+Push-Location ..\EnthusiaTags; mvn -q -DskipTests install; Pop-Location
+```
+
 ## Permissions
 
 All non-administrative permissions default to `false`. Grant `warzoneduels.command` for ordinary duel commands, `warzoneduels.spectate` for controlled watch mode, or `warzoneduels.admin` for every command, setup action, and administrative bypass. Individual permissions are declared in `plugin.yml` under those three parents for LuckPerms assignment.

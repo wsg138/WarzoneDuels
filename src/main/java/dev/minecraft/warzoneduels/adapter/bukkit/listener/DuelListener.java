@@ -754,6 +754,11 @@ public final class DuelListener implements Listener {
             duelService.sendWatcherTeleportBlocked(event.getPlayer());
             return;
         }
+        if (duelService.shouldBlockExternalTeleportIntoActiveDuel(event.getPlayer(), event.getTo())) {
+            event.setCancelled(true);
+            duelService.sendExternalTeleportIntoActiveDuelBlocked(event.getPlayer());
+            return;
+        }
         if (!duelService.isInActiveDuel(event.getPlayer().getUniqueId())) {
             if (duelService.shouldBlockArenaFootprintEntry(event.getPlayer(), event.getTo())) {
                 event.setCancelled(true);

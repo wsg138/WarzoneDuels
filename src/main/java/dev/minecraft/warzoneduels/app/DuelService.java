@@ -339,6 +339,20 @@ public final class DuelService {
         return allowance != null && allowance.matches(destination, System.currentTimeMillis());
     }
 
+    public boolean shouldBlockExternalTeleportIntoActiveDuel(Player player, Location destination) {
+        if (player == null || destination == null || activeDuel == null || isInActiveDuel(player.getUniqueId())) {
+            return false;
+        }
+        if (spectatorManager.isActiveWatcher(player.getUniqueId())) {
+            return false;
+        }
+        return spectatorManager.isInsideBoundary(destination) || arena != null && arena.contains(destination);
+    }
+
+    public void sendExternalTeleportIntoActiveDuelBlocked(Player player) {
+        spectatorManager.sendExternalTeleportIntoActiveDuelBlocked(player);
+    }
+
     public void startBuilder(Player sender, Player target) {
         requirePrimaryThread();
         if (!requirePermission(sender, PermissionPolicy.CHALLENGE)) {

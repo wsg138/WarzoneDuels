@@ -19,6 +19,17 @@ Test with separate accounts or temporary groups:
 - Remove a permission while its GUI is open; confirm the final click is denied and no duel, acceptance, vault claim, or stats navigation occurs.
 - Remove `warzoneduels.spectate` and `warzoneduels.spectate.leave` from an active watcher; `/duel leave` and `/duel unwatch` must still restore the player.
 
+## External teleport and display integrations
+
+Use a watcher W, another player P, and both duel participants.
+
+- Have W send `/tpahere P`, enter `/duel spectate`, then run `/tpaccept` as P. Confirm the request is gone and P never enters the arena or spectator boundary.
+- Repeat with P sending `/tpa W`, then with an accepted request already in its warmup before W watches. Confirm request and warmup cancellation messages reach affected players.
+- Call `Player#teleport` for P directly to W's watcher location. Confirm it is cancelled with the active-duel-area message; a destination immediately outside both the arena and spectator boundary must succeed.
+- Confirm typed WarzoneDuels participant, watcher-entry, boundary-return, recovery, and exit teleports still succeed.
+- With EnthusiaTags installed, confirm W's TextDisplay tag disappears on entry, remains absent through a tag refresh/reload, and returns on leave, duel end, disconnect recovery, and failed watcher entry. Confirm selected tag data is unchanged.
+- With the verified NotBounties version installed and wanted tags enabled, confirm W's bounty tag disappears on entry and returns on restoration without changing the bounty amount. Confirm nonparticipants can still see W's body while duelists cannot see W or either external display.
+
 ## Watch mode entry and visibility
 
 Use four players: duel participants A and B, watcher W, and ordinary player O.
