@@ -15,7 +15,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <plan.api.version>5.6.2965</plan.api.version>
         <h2.version>2.2.224</h2.version>
-        <junit.version>5.11.4</junit.version>
+        <junit.version>6.1.2</junit.version>
         <sirblobman.core.version>2.9-20251215.173206-57</sirblobman.core.version>
         <enthusia.teleport.version>1.2.6</enthusia.teleport.version>
         <enthusia.tags.version>2.1.0</enthusia.tags.version>
