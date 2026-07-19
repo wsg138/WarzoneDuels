@@ -63,18 +63,18 @@ public final class SpectatorSessionStore {
             }
             return true;
         } catch (Exception ex) {
-            logger.log(Level.SEVERE, "Failed to persist spectator session for " + session.playerId() + " (" + session.playerName() + ")", ex);
+            log(Level.SEVERE, () -> "Failed to persist spectator session for " + session.playerId() + " (" + session.playerName() + ")", ex);
             return false;
         } finally {
             try {
                 Files.deleteIfExists(temporary);
             } catch (IOException ex) {
-                logger.log(Level.WARNING, "Failed to remove temporary spectator session file " + temporary, ex);
+                log(Level.WARNING, () -> "Failed to remove temporary spectator session file " + temporary, ex);
             }
             try {
                 Files.deleteIfExists(backupTemporary);
             } catch (IOException ex) {
-                logger.log(Level.WARNING, "Failed to remove temporary spectator session backup " + backupTemporary, ex);
+                log(Level.WARNING, () -> "Failed to remove temporary spectator session backup " + backupTemporary, ex);
             }
         }
     }
@@ -85,17 +85,17 @@ public final class SpectatorSessionStore {
             try {
                 return Optional.of(loadFile(file));
             } catch (Exception ex) {
-                logger.log(Level.SEVERE, "Failed to load primary spectator session for " + playerId + " from " + file + "; attempting its isolated backup", ex);
+                log(Level.SEVERE, () -> "Failed to load primary spectator session for " + playerId + " from " + file + "; attempting its isolated backup", ex);
             }
         }
         Path backup = backupPathFor(playerId);
         if (Files.isRegularFile(backup)) {
             try {
                 SpectatorSession recovered = loadFile(backup);
-                logger.severe("Recovered spectator session " + playerId + " from its isolated backup because the primary record was missing or corrupt.");
+                log(Level.SEVERE, () -> "Recovered spectator session " + playerId + " from its isolated backup because the primary record was missing or corrupt.", null);
                 return Optional.of(recovered);
             } catch (Exception ex) {
-                logger.log(Level.SEVERE, "Failed to load spectator session backup for " + playerId + " from " + backup, ex);
+                log(Level.SEVERE, () -> "Failed to load spectator session backup for " + playerId + " from " + backup, ex);
             }
         }
         return Optional.empty();
@@ -112,11 +112,11 @@ public final class SpectatorSessionStore {
                     SpectatorSession session = loadFile(file);
                     sessions.put(session.playerId(), session);
                 } catch (Exception ex) {
-                    logger.log(Level.SEVERE, "Failed to load spectator session file " + file + "; it has been retained for manual recovery", ex);
+                    log(Level.SEVERE, () -> "Failed to load spectator session file " + file + "; it has been retained for manual recovery", ex);
                 }
             }
         } catch (IOException ex) {
-            logger.log(Level.SEVERE, "Failed to scan spectator session directory " + sessionDirectory, ex);
+            log(Level.SEVERE, () -> "Failed to scan spectator session directory " + sessionDirectory, ex);
         }
         return sessions;
     }
@@ -131,13 +131,24 @@ public final class SpectatorSessionStore {
             Files.deleteIfExists(backupPathFor(session.playerId()));
             return !exists(session.playerId());
         } catch (IOException ex) {
-            logger.log(Level.SEVERE, "Failed to delete restored spectator session for " + session.playerId() + " (" + session.playerName() + ")", ex);
+            log(Level.SEVERE, () -> "Failed to delete restored spectator session for " + session.playerId() + " (" + session.playerName() + ")", ex);
             return false;
         }
     }
 
     public Path directory() {
         return sessionDirectory;
+    }
+
+    private void log(Level level, java.util.function.Supplier<String> message, Throwable cause) {
+        if (!logger.isLoggable(level)) {
+            return;
+        }
+        if (cause == null) {
+            logger.log(level, message.get());
+            return;
+        }
+        logger.log(level, message.get(), cause);
     }
 
     private Path pathFor(UUID playerId) {
