@@ -141,14 +141,13 @@ public final class SpectatorSessionStore {
     }
 
     private void log(Level level, java.util.function.Supplier<String> message, Throwable cause) {
-        if (!logger.isLoggable(level)) {
-            return;
+        if (logger.isLoggable(level)) {
+            if (cause == null) {
+                logger.log(level, message.get());
+            } else {
+                logger.log(level, message.get(), cause);
+            }
         }
-        if (cause == null) {
-            logger.log(level, message.get());
-            return;
-        }
-        logger.log(level, message.get(), cause);
     }
 
     private Path pathFor(UUID playerId) {
