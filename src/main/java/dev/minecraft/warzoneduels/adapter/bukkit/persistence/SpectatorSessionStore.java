@@ -29,7 +29,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public final class SpectatorSessionStore {
-    private final Path directory;
+    private final Path sessionDirectory;
     private final Logger logger;
 
     public SpectatorSessionStore(WarzoneDuelsPlugin plugin) {
@@ -37,7 +37,7 @@ public final class SpectatorSessionStore {
     }
 
     public SpectatorSessionStore(Path directory, Logger logger) {
-        this.directory = directory;
+        this.sessionDirectory = directory;
         this.logger = logger;
     }
 
@@ -47,7 +47,7 @@ public final class SpectatorSessionStore {
         Path backup = backupPathFor(session.playerId());
         Path backupTemporary = backup.resolveSibling(backup.getFileName() + ".tmp");
         try {
-            Files.createDirectories(directory);
+            Files.createDirectories(sessionDirectory);
             YamlConfiguration yaml = serialize(session);
             yaml.save(temporary.toFile());
             forceFile(temporary);
@@ -103,10 +103,10 @@ public final class SpectatorSessionStore {
 
     public Map<UUID, SpectatorSession> loadAll() {
         Map<UUID, SpectatorSession> sessions = new LinkedHashMap<>();
-        if (!Files.isDirectory(directory)) {
+        if (!Files.isDirectory(sessionDirectory)) {
             return sessions;
         }
-        try (DirectoryStream<Path> files = Files.newDirectoryStream(directory, "*.yml")) {
+        try (DirectoryStream<Path> files = Files.newDirectoryStream(sessionDirectory, "*.yml")) {
             for (Path file : files) {
                 try {
                     SpectatorSession session = loadFile(file);
@@ -116,7 +116,7 @@ public final class SpectatorSessionStore {
                 }
             }
         } catch (IOException ex) {
-            logger.log(Level.SEVERE, "Failed to scan spectator session directory " + directory, ex);
+            logger.log(Level.SEVERE, "Failed to scan spectator session directory " + sessionDirectory, ex);
         }
         return sessions;
     }
@@ -137,15 +137,15 @@ public final class SpectatorSessionStore {
     }
 
     public Path directory() {
-        return directory;
+        return sessionDirectory;
     }
 
     private Path pathFor(UUID playerId) {
-        return directory.resolve(playerId + ".yml");
+        return sessionDirectory.resolve(playerId + ".yml");
     }
 
     private Path backupPathFor(UUID playerId) {
-        return directory.resolve(playerId + ".yml.bak");
+        return sessionDirectory.resolve(playerId + ".yml.bak");
     }
 
     private YamlConfiguration serialize(SpectatorSession session) {
