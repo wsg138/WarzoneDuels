@@ -6,12 +6,19 @@ on:
       - agent/fix-loser-respawn-celebration
     paths:
       - .github/workflows/apply-respawn-fix.yml
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
 
 permissions:
   contents: write
 
 jobs:
   apply-fix:
+    if: github.head_ref == 'agent/fix-loser-respawn-celebration' || github.ref_name == 'agent/fix-loser-respawn-celebration'
     runs-on: ubuntu-latest
     steps:
       - name: Check out branch
