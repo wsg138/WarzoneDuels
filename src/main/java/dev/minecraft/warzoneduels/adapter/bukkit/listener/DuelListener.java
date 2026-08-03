@@ -540,7 +540,9 @@ public final class DuelListener implements Listener {
         if (!(event.getEntity() instanceof Player player)) {
             return;
         }
-        if (duelService.shouldBlockWatcherAction(player) || duelService.shouldCancelArenaSpectatorDamage(player)) {
+        if (duelService.shouldCancelVictoryMomentDamage(player)
+            || duelService.shouldBlockWatcherAction(player)
+            || duelService.shouldCancelArenaSpectatorDamage(player)) {
             event.setCancelled(true);
         }
     }
@@ -649,14 +651,19 @@ public final class DuelListener implements Listener {
             event.setKeepInventory(true);
             return;
         }
+        boolean victoryMomentDeath = duelService.handleVictoryMomentDeath(event.getEntity());
         boolean duelDeath = duelService.isInActiveDuel(event.getEntity().getUniqueId());
         boolean forcedDeath = duelService.consumePendingForcedDeath(event.getEntity().getUniqueId());
-        if (!duelDeath && !forcedDeath) {
+        if (!duelDeath && !forcedDeath && !victoryMomentDeath) {
             return;
         }
         ArrayList<org.bukkit.inventory.ItemStack> drops = new ArrayList<>(event.getDrops());
         event.getDrops().clear();
         event.setDroppedExp(0);
+        if (victoryMomentDeath) {
+            event.setKeepInventory(true);
+            event.setKeepLevel(true);
+        }
         if (duelDeath) {
             duelService.handleDeath(event.getEntity(), drops);
         }
