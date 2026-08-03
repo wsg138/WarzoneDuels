@@ -1,1 +1,0 @@
-Validate the durable WarzoneDuels 1.0.1 optional API compatibility release.
