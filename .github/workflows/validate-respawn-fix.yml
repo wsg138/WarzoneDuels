@@ -33,11 +33,17 @@ jobs:
           python3 scripts/apply_respawn_lifecycle_fix.py
           rm -f .validation-trigger
 
+      - name: Prepare compile-only validation dependencies
+        shell: bash
+        run: |
+          git show origin/agent/fix-defeated-respawn-guard:scripts/prepare_validation_dependencies.sh > /tmp/prepare-validation-dependencies.sh
+          bash /tmp/prepare-validation-dependencies.sh
+
       - name: Check patch integrity
         run: git diff --check
 
       - name: Run tests and build shaded jar
-        run: mvn -B -ntp clean verify
+        run: mvn -B -ntp -f pom.validation.xml clean verify
 
       - name: Verify plugin artifact
         shell: bash
@@ -50,6 +56,7 @@ jobs:
       - name: Commit validated source fix
         shell: bash
         run: |
+          rm -f pom.validation.xml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
