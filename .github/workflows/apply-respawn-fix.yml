@@ -1,0 +1,140 @@
+name: Apply loser respawn celebration fix
+
+on:
+  push:
+    branches:
+      - agent/fix-loser-respawn-celebration
+    paths:
+      - .github/workflows/apply-respawn-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/fix-loser-respawn-celebration
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Patch duel conclusion lifecycle
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("src/main/java/dev/minecraft/warzoneduels/app/DuelService.java")
+          text = path.read_text(encoding="utf-8")
+
+          replacements = [
+              (
+                  "    private final Set<UUID> respawnToSpawn = ConcurrentHashMap.newKeySet();\n",
+                  "    private final Set<UUID> respawnToSpawn = ConcurrentHashMap.newKeySet();\n"
+                  "    private final Set<UUID> eliminatedParticipantIds = ConcurrentHashMap.newKeySet();\n",
+              ),
+              (
+                  "    public boolean isInActiveDuel(UUID playerId) {\n"
+                  "        return activeDuel != null && activeDuel.contains(playerId);\n"
+                  "    }\n",
+                  "    public boolean isInActiveDuel(UUID playerId) {\n"
+                  "        return activeDuel != null\n"
+                  "            && activeDuel.contains(playerId)\n"
+                  "            && !eliminatedParticipantIds.contains(playerId);\n"
+                  "    }\n",
+              ),
+              (
+                  "        MatchParticipant participant = activeDuel.participant(player.getUniqueId());\n"
+                  "        if (participant == null) {\n"
+                  "            return;\n"
+                  "        }\n"
+                  "        disconnectSnapshots.put(player.getUniqueId(), loadoutArchiveStore.capture(player));\n",
+                  "        MatchParticipant participant = activeDuel.participant(player.getUniqueId());\n"
+                  "        if (participant == null || eliminatedParticipantIds.contains(player.getUniqueId())) {\n"
+                  "            return;\n"
+                  "        }\n"
+                  "        disconnectSnapshots.put(player.getUniqueId(), loadoutArchiveStore.capture(player));\n",
+              ),
+              (
+                  "        MatchParticipant participant = activeDuel.participant(player.getUniqueId());\n"
+                  "        if (participant == null) {\n"
+                  "            return;\n"
+                  "        }\n"
+                  "        participant.setDisconnectDeadlineEpochMs(null);\n",
+                  "        MatchParticipant participant = activeDuel.participant(player.getUniqueId());\n"
+                  "        if (participant == null) {\n"
+                  "            return;\n"
+                  "        }\n"
+                  "        if (eliminatedParticipantIds.contains(player.getUniqueId())) {\n"
+                  "            teleportToExit(player);\n"
+                  "            return;\n"
+                  "        }\n"
+                  "        participant.setDisconnectDeadlineEpochMs(null);\n",
+              ),
+              (
+                  "        respawnToSpawn.add(dead.playerId());\n"
+                  "        concludeDuel(winnerPlayer, DuelEndReason.KILL, true);\n",
+                  "        eliminatedParticipantIds.add(dead.playerId());\n"
+                  "        activeParticipantIndex.remove(dead.playerId());\n"
+                  "        respawnToSpawn.add(dead.playerId());\n"
+                  "        concludeDuel(winnerPlayer, DuelEndReason.KILL, true);\n",
+              ),
+              (
+                  "    private void enforceParticipantContainment(UUID playerId) {\n"
+                  "        Player player = Bukkit.getPlayer(playerId);\n",
+                  "    private void enforceParticipantContainment(UUID playerId) {\n"
+                  "        if (eliminatedParticipantIds.contains(playerId)) {\n"
+                  "            return;\n"
+                  "        }\n"
+                  "        Player player = Bukkit.getPlayer(playerId);\n",
+              ),
+              (
+                  "        if (second != null && second.isOnline() && !respawnToSpawn.contains(participantTwo)) {\n"
+                  "            teleportToExit(second);\n"
+                  "        }\n\n"
+                  "        activeDuel = null;\n",
+                  "        if (second != null && second.isOnline() && !respawnToSpawn.contains(participantTwo)) {\n"
+                  "            teleportToExit(second);\n"
+                  "        }\n\n"
+                  "        eliminatedParticipantIds.remove(participantOne);\n"
+                  "        eliminatedParticipantIds.remove(participantTwo);\n"
+                  "        activeDuel = null;\n",
+              ),
+              (
+                  "        pendingForcedDeathIds.clear();\n"
+                  "        duelCountdownActive = false;\n",
+                  "        pendingForcedDeathIds.clear();\n"
+                  "        eliminatedParticipantIds.clear();\n"
+                  "        duelCountdownActive = false;\n",
+              ),
+          ]
+
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"Expected exactly one match, found {count}: {old[:100]!r}")
+              text = text.replace(old, new, 1)
+
+          path.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Run Maven tests
+        run: mvn -B -ntp test
+
+      - name: Commit applied fix
+        shell: bash
+        run: |
+          rm .github/workflows/apply-respawn-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/main/java/dev/minecraft/warzoneduels/app/DuelService.java .github/workflows/apply-respawn-fix.yml
+          git commit -m "fix: keep defeated players out of arena"
+          git push origin HEAD:agent/fix-loser-respawn-celebration
