@@ -1,5 +1,12 @@
 from pathlib import Path
 
+pom = Path("pom.xml")
+pom_text = pom.read_text(encoding="utf-8")
+expected = "<plan.api.version>5.6-R0.1</plan.api.version>"
+if pom_text.count(expected) != 1:
+    raise SystemExit("expected generated Plan API version was not found exactly once")
+pom.write_text(pom_text.replace(expected, "<plan.api.version>5.7-R0.2</plan.api.version>", 1), encoding="utf-8")
+
 path = Path("src/test/java/dev/minecraft/warzoneduels/integration/OptionalIntegrationBinaryIsolationTest.java")
 path.parent.mkdir(parents=True, exist_ok=True)
 path.write_text(
