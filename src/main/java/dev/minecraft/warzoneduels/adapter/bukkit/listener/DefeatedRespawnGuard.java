@@ -15,6 +15,7 @@ import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.scheduler.BukkitRunnable;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -30,6 +31,7 @@ public final class DefeatedRespawnGuard implements Listener {
     private final WarzoneDuelsPlugin plugin;
     private final DuelService duelService;
     private final Set<UUID> guardedPlayerIds = ConcurrentHashMap.newKeySet();
+    private final Map<UUID, GuardedMove> guardedMoves = new ConcurrentHashMap<>();
 
     public DefeatedRespawnGuard(WarzoneDuelsPlugin plugin, DuelService duelService) {
         this.plugin = plugin;
@@ -47,10 +49,25 @@ public final class DefeatedRespawnGuard implements Listener {
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
-    public void onGuardedMove(PlayerMoveEvent event) {
-        if (isGuardActive(event.getPlayer().getUniqueId())) {
-            event.setCancelled(true);
+    public void captureGuardedMove(PlayerMoveEvent event) {
+        UUID playerId = event.getPlayer().getUniqueId();
+        if (!isGuardActive(playerId)) {
+            return;
         }
+        Location destination = event.getTo() == null ? null : event.getTo().clone();
+        guardedMoves.put(playerId, new GuardedMove(destination, event.isCancelled()));
+        event.setCancelled(true);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public void restoreGuardedMove(PlayerMoveEvent event) {
+        UUID playerId = event.getPlayer().getUniqueId();
+        GuardedMove guardedMove = guardedMoves.remove(playerId);
+        if (guardedMove == null || !isGuardActive(playerId)) {
+            return;
+        }
+        event.setTo(guardedMove.destination());
+        event.setCancelled(guardedMove.previouslyCancelled());
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
@@ -86,7 +103,7 @@ public final class DefeatedRespawnGuard implements Listener {
         if (duelService.hasActiveDuel()) {
             return true;
         }
-        guardedPlayerIds.remove(playerId);
+        clearGuard(playerId);
         return false;
     }
 
@@ -105,7 +122,7 @@ public final class DefeatedRespawnGuard implements Listener {
                     return;
                 }
                 if (!duelService.hasActiveDuel() || elapsedTicks >= timeoutTicks) {
-                    guardedPlayerIds.remove(playerId);
+                    clearGuard(playerId);
                     cancel();
                     return;
                 }
@@ -114,10 +131,18 @@ public final class DefeatedRespawnGuard implements Listener {
         }.runTaskTimer(plugin, RELEASE_CHECK_PERIOD_TICKS, RELEASE_CHECK_PERIOD_TICKS);
     }
 
+    private void clearGuard(UUID playerId) {
+        guardedPlayerIds.remove(playerId);
+        guardedMoves.remove(playerId);
+    }
+
     private void teleportToExit(Player player) {
         ArenaDefinition arena = duelService.arena();
         if (arena != null) {
             duelService.teleportSafe(player, arena.exit());
         }
+    }
+
+    private record GuardedMove(Location destination, boolean previouslyCancelled) {
     }
 }
