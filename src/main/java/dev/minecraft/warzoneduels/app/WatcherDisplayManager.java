@@ -12,7 +12,7 @@ final class WatcherDisplayManager {
 
     WatcherDisplayManager(WarzoneDuelsPlugin plugin) {
         this.plugin = plugin;
-        this.hooks = List.of(new EnthusiaTagsWatcherDisplayHook(), new NotBountiesWatcherDisplayHook(plugin));
+        this.hooks = List.of(new EnthusiaTagsWatcherDisplayHook(plugin), new NotBountiesWatcherDisplayHook(plugin));
     }
 
     void suppress(Player watcher) {
@@ -31,7 +31,7 @@ final class WatcherDisplayManager {
         for (WatcherDisplayHook hook : hooks) {
             try {
                 operation.apply(hook);
-            } catch (RuntimeException ex) {
+            } catch (LinkageError | RuntimeException ex) {
                 plugin.getLogger().log(Level.WARNING, "Failed to " + action + " watcher display hook "
                     + hook.getClass().getSimpleName() + " for " + watcher.getUniqueId(), ex);
             }
