@@ -98,6 +98,7 @@ public final class DuelService {
     private final Set<UUID> allowedArenaItemEntityIds = ConcurrentHashMap.newKeySet();
     private final Map<BlockKey, Long> allowedArenaItemSpawnLocations = new ConcurrentHashMap<>();
     private final Set<UUID> respawnToSpawn = ConcurrentHashMap.newKeySet();
+    private final Set<UUID> eliminatedParticipantIds = ConcurrentHashMap.newKeySet();
     private final Set<UUID> recoveryTeleportIds = ConcurrentHashMap.newKeySet();
     private final Set<UUID> activeParticipantIndex = ConcurrentHashMap.newKeySet();
     private final Map<UUID, LoadoutSnapshot> disconnectSnapshots = new ConcurrentHashMap<>();
@@ -208,7 +209,10 @@ public final class DuelService {
         }
 
         if (duelEnding && activeDuel != null) {
-            teleportOnlineParticipantsToExit(activeDuel);
+            ActiveDuel endingDuel = activeDuel;
+            teleportOnlineParticipantsToExit(endingDuel);
+            clearRespawnMarkerIfLiving(endingDuel.participantOne().playerId());
+            clearRespawnMarkerIfLiving(endingDuel.participantTwo().playerId());
             activeDuel = null;
             duelEnding = false;
             runtimeStateStore.clearRuntime();
@@ -321,7 +325,31 @@ public final class DuelService {
     }
 
     public boolean isInActiveDuel(UUID playerId) {
-        return activeDuel != null && activeDuel.contains(playerId);
+        return activeDuel != null
+            && activeDuel.contains(playerId)
+            && !eliminatedParticipantIds.contains(playerId);
+    }
+
+    public boolean shouldCancelVictoryMomentDamage(Player player) {
+        return player != null
+            && duelEnding
+            && activeDuel != null
+            && activeDuel.contains(player.getUniqueId())
+            && !eliminatedParticipantIds.contains(player.getUniqueId());
+    }
+
+    public boolean handleVictoryMomentDeath(Player player) {
+        requirePrimaryThread();
+        if (player == null || !duelEnding || activeDuel == null) {
+            return false;
+        }
+        UUID playerId = player.getUniqueId();
+        if (!activeDuel.contains(playerId) || !eliminatedParticipantIds.add(playerId)) {
+            return false;
+        }
+        respawnToSpawn.add(playerId);
+        activeParticipantIndex.remove(playerId);
+        return true;
     }
 
     public boolean isParticipantRestricted(UUID playerId) {
@@ -644,7 +672,7 @@ public final class DuelService {
             }
             return;
         }
-        if (activeDuel == null) {
+        if (activeDuel == null || duelEnding) {
             sendMessage(player, "messages.not-in-duel");
             return;
         }
@@ -687,7 +715,7 @@ public final class DuelService {
             sendMessageOrFallback(player, "messages.duel-watch-unavailable", ChatColor.RED + "There is no active duel to watch.");
             return;
         }
-        if (isInActiveDuel(player.getUniqueId())) {
+        if (activeDuel.contains(player.getUniqueId())) {
             sendMessageOrFallback(player, "messages.duel-watch-participant", ChatColor.RED + "You are already participating in this duel.");
             return;
         }
@@ -825,7 +853,7 @@ public final class DuelService {
             return;
         }
         MatchParticipant participant = activeDuel.participant(player.getUniqueId());
-        if (participant == null) {
+        if (participant == null || duelEnding) {
             return;
         }
         disconnectSnapshots.put(player.getUniqueId(), loadoutArchiveStore.capture(player));
@@ -858,10 +886,17 @@ public final class DuelService {
             handleUnauthorizedArenaEntry(player);
         }
         if (activeDuel == null) {
+            clearCompletedRespawnMarker(player);
             return;
         }
         MatchParticipant participant = activeDuel.participant(player.getUniqueId());
         if (participant == null) {
+            return;
+        }
+        if (duelEnding) {
+            if (eliminatedParticipantIds.contains(player.getUniqueId())) {
+                teleportToExit(player);
+            }
             return;
         }
         participant.setDisconnectDeadlineEpochMs(null);
@@ -898,7 +933,7 @@ public final class DuelService {
 
     public void handleDeath(Player player, List<ItemStack> drops) {
         requirePrimaryThread();
-        if (activeDuel == null) {
+        if (activeDuel == null || duelEnding) {
             return;
         }
         MatchParticipant dead = activeDuel.participant(player.getUniqueId());
@@ -911,6 +946,8 @@ public final class DuelService {
             spoilsService.createSpoils(winner.playerId(), winner.name(), dead.playerId(), dead.name(), drops);
         }
         respawnToSpawn.add(dead.playerId());
+        eliminatedParticipantIds.add(dead.playerId());
+        activeParticipantIndex.remove(dead.playerId());
         concludeDuel(winnerPlayer, DuelEndReason.KILL, true);
     }
 
@@ -1648,16 +1685,9 @@ public final class DuelService {
 
         if (winner != null) {
             healAfterDuel(winner);
-            teleportToExit(winner);
         }
-        Player first = Bukkit.getPlayer(participantOne);
-        Player second = Bukkit.getPlayer(participantTwo);
-        if (first != null && first.isOnline() && !respawnToSpawn.contains(participantOne)) {
-            teleportToExit(first);
-        }
-        if (second != null && second.isOnline() && !respawnToSpawn.contains(participantTwo)) {
-            teleportToExit(second);
-        }
+        finishParticipantExit(participantOne);
+        finishParticipantExit(participantTwo);
 
         activeDuel = null;
         duelEnding = false;
@@ -1666,6 +1696,29 @@ public final class DuelService {
         rebuildParticipantIndex();
         spectatorManager.restoreAllOnline("duel-ended");
         cleanupArenaAfterMatch(finishedDuel, true);
+    }
+
+    private void finishParticipantExit(UUID playerId) {
+        Player player = Bukkit.getPlayer(playerId);
+        if (player == null || !player.isOnline() || player.isDead()) {
+            return;
+        }
+        teleportToExit(player);
+        respawnToSpawn.remove(playerId);
+    }
+
+    private void clearCompletedRespawnMarker(Player player) {
+        if (player == null || player.isDead() || !respawnToSpawn.remove(player.getUniqueId())) {
+            return;
+        }
+        teleportToExit(player);
+    }
+
+    private void clearRespawnMarkerIfLiving(UUID playerId) {
+        Player player = Bukkit.getPlayer(playerId);
+        if (player != null && player.isOnline() && !player.isDead()) {
+            respawnToSpawn.remove(playerId);
+        }
     }
 
     private void teleportOnlineParticipantsToExit(ActiveDuel duel) {
@@ -1761,6 +1814,7 @@ public final class DuelService {
         arenaExitMessageCooldowns.clear();
         victoryFireworkIds.clear();
         pendingForcedDeathIds.clear();
+        eliminatedParticipantIds.clear();
         duelCountdownActive = false;
     }
 
@@ -1902,6 +1956,9 @@ public final class DuelService {
     }
 
     private void enforceParticipantContainment(UUID playerId) {
+        if (!isInActiveDuel(playerId)) {
+            return;
+        }
         Player player = Bukkit.getPlayer(playerId);
         if (player == null || !player.isOnline() || player.isDead()) {
             return;
@@ -1989,9 +2046,13 @@ public final class DuelService {
 
     private void rebuildParticipantIndex() {
         activeParticipantIndex.clear();
-        if (activeDuel != null) {
-            activeParticipantIndex.add(activeDuel.participantOne().playerId());
-            activeParticipantIndex.add(activeDuel.participantTwo().playerId());
+        if (activeDuel == null) {
+            return;
+        }
+        for (UUID playerId : List.of(activeDuel.participantOne().playerId(), activeDuel.participantTwo().playerId())) {
+            if (!eliminatedParticipantIds.contains(playerId)) {
+                activeParticipantIndex.add(playerId);
+            }
         }
     }
 
@@ -2078,7 +2139,20 @@ public final class DuelService {
         if (activeDuel == null) {
             return Set.of();
         }
-        return Set.of(activeDuel.participantOne().playerId(), activeDuel.participantTwo().playerId());
+        UUID participantOne = activeDuel.participantOne().playerId();
+        UUID participantTwo = activeDuel.participantTwo().playerId();
+        boolean firstEliminated = eliminatedParticipantIds.contains(participantOne);
+        boolean secondEliminated = eliminatedParticipantIds.contains(participantTwo);
+        if (firstEliminated && secondEliminated) {
+            return Set.of();
+        }
+        if (firstEliminated) {
+            return Set.of(participantTwo);
+        }
+        if (secondEliminated) {
+            return Set.of(participantOne);
+        }
+        return Set.of(participantOne, participantTwo);
     }
 
     private void sendMessageOrFallback(Player player, String path, String fallback) {
