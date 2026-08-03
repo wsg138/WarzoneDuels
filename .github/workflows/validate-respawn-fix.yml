@@ -28,7 +28,10 @@ jobs:
           cache: maven
 
       - name: Apply lifecycle-safe source patch
-        run: python3 scripts/apply_respawn_lifecycle_fix.py
+        shell: bash
+        run: |
+          python3 scripts/apply_respawn_lifecycle_fix.py
+          rm -f .validation-trigger
 
       - name: Check patch integrity
         run: git diff --check
