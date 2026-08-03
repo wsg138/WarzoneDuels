@@ -1,0 +1,77 @@
+name: Validate optional API compatibility release
+
+on:
+  pull_request:
+    branches:
+      - agent/fix-optional-api-compatibility
+
+permissions:
+  contents: write
+
+jobs:
+  validate-and-apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out validation branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Apply permanent compatibility release
+        run: |
+          python scripts/apply_optional_api_hotfix.py
+          python scripts/refine_optional_api_compatibility_release.py
+
+      - name: Prepare internal provided APIs
+        run: bash scripts/prepare_internal_validation_dependencies.sh
+
+      - name: Run full test and package lifecycle
+        run: mvn -B clean verify
+
+      - name: Verify binary compatibility and plugin artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          jar_path="target/WarzoneDuels-1.0.1.jar"
+          test -f "$jar_path"
+          jar tf "$jar_path" | grep -q '^plugin.yml$'
+          jar tf "$jar_path" | grep -q '^dev/minecraft/warzoneduels/WarzoneDuelsPlugin.class$'
+          unzip -p "$jar_path" plugin.yml | grep -q '^version: 1.0.1$'
+          ! jar tf "$jar_path" | grep -q '^com/djrapitops/plan/'
+          ! jar tf "$jar_path" | grep -q '^net/milkbowl/vault/'
+          ! jar tf "$jar_path" | grep -q '^com/github/sirblobman/combatlogx/'
+          javap -classpath target/classes -verbose dev.minecraft.warzoneduels.adapter.plan.PlanHook \
+            | grep -q 'InterfaceMethodref.*CapabilityService.getInstance'
+          sha256sum "$jar_path"
+
+      - name: Commit exact validated source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/validate-optional-api-compatibility.yml
+          rm -f scripts/apply_optional_api_hotfix.py
+          rm -f scripts/refine_optional_api_compatibility_release.py
+          rm -f scripts/prepare_internal_validation_dependencies.sh
+          rm -rf .validation
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git diff --cached --check
+          git commit -m 'fix: make optional integrations binary-compatible'
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
+
+      - name: Upload production JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: WarzoneDuels-1.0.1
+          path: target/WarzoneDuels-1.0.1.jar
+          if-no-files-found: error
+          retention-days: 14
