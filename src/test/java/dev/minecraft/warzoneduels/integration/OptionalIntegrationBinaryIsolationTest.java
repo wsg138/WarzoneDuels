@@ -1,9 +1,4 @@
-from pathlib import Path
-
-path = Path("src/test/java/dev/minecraft/warzoneduels/integration/OptionalIntegrationBinaryIsolationTest.java")
-path.parent.mkdir(parents=True, exist_ok=True)
-path.write_text(
-    r'''package dev.minecraft.warzoneduels.integration;
+package dev.minecraft.warzoneduels.integration;
 
 import dev.minecraft.warzoneduels.WarzoneDuelsPlugin;
 import dev.minecraft.warzoneduels.adapter.bukkit.integration.CombatLogXCombatTagPort;
@@ -67,6 +62,3 @@ class OptionalIntegrationBinaryIsolationTest {
         }
     }
 }
-''',
-    encoding="utf-8",
-)
