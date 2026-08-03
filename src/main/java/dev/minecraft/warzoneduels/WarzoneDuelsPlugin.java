@@ -5,6 +5,7 @@ import dev.minecraft.warzoneduels.adapter.bukkit.command.StatsCommand;
 import dev.minecraft.warzoneduels.adapter.bukkit.gui.DuelGuiListener;
 import dev.minecraft.warzoneduels.adapter.bukkit.integration.CombatLogXCombatTagPort;
 import dev.minecraft.warzoneduels.adapter.bukkit.integration.NoOpCombatTagPort;
+import dev.minecraft.warzoneduels.adapter.bukkit.listener.DefeatedRespawnGuard;
 import dev.minecraft.warzoneduels.adapter.bukkit.listener.DuelListener;
 import dev.minecraft.warzoneduels.adapter.bukkit.persistence.ArenaFootprintStore;
 import dev.minecraft.warzoneduels.adapter.bukkit.persistence.ArenaMapSnapshotStore;
@@ -97,6 +98,7 @@ public class WarzoneDuelsPlugin extends JavaPlugin {
             activeArenaTerrainService.ensureDefaultSnapshotLoaded(message -> getLogger().info(message));
         }
 
+        getServer().getPluginManager().registerEvents(new DefeatedRespawnGuard(this, activeDuelService), this);
         getServer().getPluginManager().registerEvents(new DuelListener(activeDuelService), this);
         getServer().getPluginManager().registerEvents(new DuelGuiListener(activeDuelService), this);
         getServer().getPluginManager().registerEvents(new SpoilsGuiListener(this, activeSpoilsService), this);
