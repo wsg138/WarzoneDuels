@@ -20,7 +20,7 @@ package org.enthusia.teleport.api;
 import java.util.UUID;
 
 public interface TeleportApi {
-    void cancelAllRequestsInvolving(UUID playerId, CancelReason reason);
+    int cancelAllRequestsInvolving(UUID playerId, CancelReason reason);
 }
 JAVA
 cat > "$work_dir/src/org/enthusia/tags/api/TagVisibilityService.java" <<'JAVA'
@@ -29,8 +29,9 @@ package org.enthusia.tags.api;
 import java.util.UUID;
 
 public interface TagVisibilityService {
-    void suppress(UUID playerId, String owner);
-    void unsuppress(UUID playerId, String owner);
+    void suppress(UUID playerId, Object owner);
+    void unsuppress(UUID playerId, Object owner);
+    boolean isSuppressed(UUID playerId);
 }
 JAVA
 
