@@ -16,6 +16,8 @@ import java.lang.reflect.Method;
 
 /** Optional CombatLogX bridge that avoids hard binary linkage to its API and BlueSlimeCore. */
 public final class CombatLogXCombatTagPort implements CombatTagPort, Listener {
+    private static final String COMBAT_LOG_X_API = "com.github.sirblobman.combatlogx.api.ICombatLogX";
+    private static final String COMBAT_MANAGER_API = "com.github.sirblobman.combatlogx.api.manager.ICombatManager";
     private static final String PRE_TAG_EVENT = "com.github.sirblobman.combatlogx.api.event.PlayerPreTagEvent";
     private static final String UNTAG_REASON = "com.github.sirblobman.combatlogx.api.object.UntagReason";
 
@@ -28,6 +30,7 @@ public final class CombatLogXCombatTagPort implements CombatTagPort, Listener {
     private Method untagMethod;
     private Method eventPlayerMethod;
     private boolean registered;
+    private boolean failClosed;
     private boolean failureLogged;
 
     public CombatLogXCombatTagPort(WarzoneDuelsPlugin plugin, DuelService duelService) {
@@ -37,22 +40,28 @@ public final class CombatLogXCombatTagPort implements CombatTagPort, Listener {
 
     @Override
     public void enable() {
+        failClosed = false;
         Plugin other = Bukkit.getPluginManager().getPlugin("CombatLogX");
         if (other == null || !other.isEnabled()) {
             return;
         }
         try {
             ClassLoader loader = other.getClass().getClassLoader();
-            Object resolvedManager = other.getClass().getMethod("getCombatManager").invoke(other);
-            if (resolvedManager == null) {
-                return;
+            Class<?> apiType = Class.forName(COMBAT_LOG_X_API, true, loader);
+            Class<?> managerType = Class.forName(COMBAT_MANAGER_API, true, loader);
+            if (!apiType.isInstance(other)) {
+                throw new IllegalStateException("CombatLogX plugin does not implement its public API");
+            }
+            Object resolvedManager = apiType.getMethod("getCombatManager").invoke(other);
+            if (resolvedManager == null || !managerType.isInstance(resolvedManager)) {
+                throw new IllegalStateException("CombatLogX did not expose a compatible combat manager");
             }
 
             Class<?> untagReasonClass = Class.forName(UNTAG_REASON, true, loader);
             @SuppressWarnings({"rawtypes", "unchecked"})
             Object resolvedExpireReason = Enum.valueOf((Class) untagReasonClass.asSubclass(Enum.class), "EXPIRE");
-            Method resolvedIsInCombat = resolvedManager.getClass().getMethod("isInCombat", Player.class);
-            Method resolvedUntag = resolvedManager.getClass().getMethod("untag", Player.class, untagReasonClass);
+            Method resolvedIsInCombat = managerType.getMethod("isInCombat", Player.class);
+            Method resolvedUntag = managerType.getMethod("untag", Player.class, untagReasonClass);
 
             Class<?> rawEventClass = Class.forName(PRE_TAG_EVENT, true, loader);
             if (!Event.class.isAssignableFrom(rawEventClass)) {
@@ -81,14 +90,14 @@ public final class CombatLogXCombatTagPort implements CombatTagPort, Listener {
             }
             plugin.getLogger().info("Hooked WarzoneDuels into CombatLogX combat tagging.");
         } catch (ReflectiveOperationException | LinkageError | RuntimeException ex) {
-            clearBridgeState();
-            logFailure("CombatLogX API is incompatible; duel combat-tag integration is disabled.", ex);
+            markUnavailable("CombatLogX API is incompatible; new duel entry is blocked until the integration is restored.", ex);
         }
     }
 
     @Override
     public void disable() {
         clearBridgeState();
+        failClosed = false;
         if (registered) {
             HandlerList.unregisterAll(this);
             registered = false;
@@ -97,20 +106,26 @@ public final class CombatLogXCombatTagPort implements CombatTagPort, Listener {
 
     @Override
     public boolean isInCombat(Player player) {
-        if (combatManager == null || isInCombatMethod == null || player == null || !player.isOnline()) {
+        if (player == null || !player.isOnline()) {
+            return false;
+        }
+        if (failClosed) {
+            return true;
+        }
+        if (combatManager == null || isInCombatMethod == null) {
             return false;
         }
         try {
             return Boolean.TRUE.equals(isInCombatMethod.invoke(combatManager, player));
         } catch (ReflectiveOperationException | LinkageError | RuntimeException ex) {
-            logFailure("CombatLogX combat lookup failed; treating the player as not tagged.", ex);
-            return false;
+            markUnavailable("CombatLogX combat lookup failed; new duel entry is now blocked.", ex);
+            return true;
         }
     }
 
     @Override
     public void clearCombatState(Player player) {
-        if (combatManager == null || untagMethod == null || expireReason == null || player == null || !player.isOnline()) {
+        if (failClosed || combatManager == null || untagMethod == null || expireReason == null || player == null || !player.isOnline()) {
             return;
         }
         try {
@@ -118,7 +133,7 @@ public final class CombatLogXCombatTagPort implements CombatTagPort, Listener {
                 untagMethod.invoke(combatManager, player, expireReason);
             }
         } catch (ReflectiveOperationException | LinkageError | RuntimeException ex) {
-            logFailure("CombatLogX untag failed; duel startup will continue without clearing the external tag.", ex);
+            markUnavailable("CombatLogX untag failed; new duel entry is now blocked.", ex);
         }
     }
 
@@ -132,8 +147,14 @@ public final class CombatLogXCombatTagPort implements CombatTagPort, Listener {
                 cancellable.setCancelled(true);
             }
         } catch (ReflectiveOperationException | LinkageError | RuntimeException ex) {
-            logFailure("CombatLogX pre-tag interception failed.", ex);
+            markUnavailable("CombatLogX pre-tag interception failed; new duel entry is now blocked.", ex);
         }
+    }
+
+    private void markUnavailable(String message, Throwable throwable) {
+        clearBridgeState();
+        failClosed = true;
+        logFailure(message, throwable);
     }
 
     private void clearBridgeState() {
