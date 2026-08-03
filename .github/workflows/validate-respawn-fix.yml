@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   validate-and-apply:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'agent/validate-respawn-lifecycle-v6'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'agent/validate-respawn-lifecycle-v7'
     runs-on: ubuntu-latest
     steps:
       - name: Check out validation branch
@@ -32,6 +32,7 @@ jobs:
         run: |
           python3 scripts/apply_respawn_lifecycle_fix.py
           python3 scripts/refine_respawn_lifecycle_fix.py
+          python3 scripts/finalize_respawn_lifecycle_fix.py
           rm -f .validation-trigger
 
       - name: Prepare validation dependencies
@@ -59,7 +60,7 @@ jobs:
         shell: bash
         run: |
           rm -f pom.validation.xml
-          rm -f scripts/refine_respawn_lifecycle_fix.py scripts/prepare_validation_dependencies.sh scripts/prepare_enthusia_validation_stubs.sh scripts/strip_unneeded_validation_dependencies.py
+          rm -f scripts/refine_respawn_lifecycle_fix.py scripts/finalize_respawn_lifecycle_fix.py scripts/prepare_validation_dependencies.sh scripts/prepare_enthusia_validation_stubs.sh scripts/strip_unneeded_validation_dependencies.py
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
