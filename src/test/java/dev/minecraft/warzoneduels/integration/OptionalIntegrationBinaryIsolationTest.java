@@ -14,10 +14,18 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class OptionalIntegrationBinaryIsolationTest {
     @Test
-    void optionalVaultAndCombatLogXApisAreNotHardLinked() throws IOException {
+    void optionalApisAreNotHardLinked() throws Exception {
         assertNoClassConstant(WarzoneDuelsPlugin.class, "net/milkbowl/vault/");
         assertNoClassConstant(VaultEconomyPort.class, "net/milkbowl/vault/");
         assertNoClassConstant(CombatLogXCombatTagPort.class, "com/github/sirblobman/combatlogx/");
+        assertNoClassConstant(
+            Class.forName("dev.minecraft.warzoneduels.app.EnthusiaTagsWatcherDisplayHook"),
+            "org/enthusia/tags/"
+        );
+        assertNoClassConstant(
+            Class.forName("dev.minecraft.warzoneduels.app.WatcherTeleportCancellationHook"),
+            "org/enthusia/teleport/"
+        );
     }
 
     private void assertNoClassConstant(Class<?> type, String forbiddenPrefix) throws IOException {
