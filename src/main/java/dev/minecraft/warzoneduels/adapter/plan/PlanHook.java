@@ -1,12 +1,12 @@
 package dev.minecraft.warzoneduels.adapter.plan;
 
+import com.djrapitops.plan.capability.CapabilityService;
+import com.djrapitops.plan.delivery.web.ResolverService;
+import com.djrapitops.plan.extension.ExtensionService;
 import dev.minecraft.warzoneduels.WarzoneDuelsPlugin;
 import dev.minecraft.warzoneduels.app.DuelAnalyticsService;
 import dev.minecraft.warzoneduels.app.DuelService;
 import dev.minecraft.warzoneduels.app.StatsService;
-import com.djrapitops.plan.capability.CapabilityService;
-import com.djrapitops.plan.delivery.web.ResolverService;
-import com.djrapitops.plan.extension.ExtensionService;
 
 public final class PlanHook {
     private final WarzoneDuelsPlugin plugin;
@@ -27,12 +27,17 @@ public final class PlanHook {
     }
 
     public void hookIntoPlan() {
-        if (!areCapabilitiesAvailable()) {
-            return;
+        try {
+            if (!areCapabilitiesAvailable()) {
+                plugin.getLogger().warning("Plan does not expose the data and page extension APIs; integration is disabled.");
+                return;
+            }
+            registerDataExtension();
+            registerPageExtension();
+            listenForPlanReloads();
+        } catch (LinkageError | RuntimeException ex) {
+            logCompatibilityFailure("initialize", ex);
         }
-        registerDataExtension();
-        registerPageExtension();
-        listenForPlanReloads();
     }
 
     private boolean areCapabilitiesAvailable() {
@@ -48,6 +53,8 @@ public final class PlanHook {
             plugin.getLogger().warning("Plan is enabled but not ready for the duel data extension: " + ex.getMessage());
         } catch (IllegalArgumentException ex) {
             plugin.getLogger().warning("Plan rejected the duel data extension: " + ex.getMessage());
+        } catch (LinkageError ex) {
+            logCompatibilityFailure("register its data extension", ex);
         }
     }
 
@@ -61,15 +68,29 @@ public final class PlanHook {
             plugin.getLogger().warning("Plan is enabled but not ready for the duel dashboard page: " + ex.getMessage());
         } catch (IllegalArgumentException ex) {
             plugin.getLogger().warning("Plan rejected the duel dashboard page: " + ex.getMessage());
+        } catch (LinkageError ex) {
+            logCompatibilityFailure("register its dashboard page", ex);
         }
     }
 
     private void listenForPlanReloads() {
-        CapabilityService.getInstance().registerEnableListener(isEnabled -> {
-            if (isEnabled) {
-                registerDataExtension();
-                registerPageExtension();
-            }
-        });
+        try {
+            CapabilityService.getInstance().registerEnableListener(isEnabled -> {
+                if (Boolean.TRUE.equals(isEnabled)) {
+                    registerDataExtension();
+                    registerPageExtension();
+                }
+            });
+        } catch (LinkageError | RuntimeException ex) {
+            logCompatibilityFailure("register its reload listener", ex);
+        }
+    }
+
+    private void logCompatibilityFailure(String action, Throwable throwable) {
+        String detail = throwable.getMessage();
+        plugin.getLogger().warning(
+            "WarzoneDuels could not " + action + " with the installed Plan API; the plugin will continue without Plan integration"
+                + (detail == null || detail.isBlank() ? "." : ": " + detail)
+        );
     }
 }

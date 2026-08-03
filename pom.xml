@@ -6,19 +6,16 @@
 
     <groupId>dev.minecraft</groupId>
     <artifactId>WarzoneDuels</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>1.0.1</version>
     <packaging>jar</packaging>
 
     <properties>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <plan.api.version>5.6.2965</plan.api.version>
+        <plan.api.version>5.7-R0.2</plan.api.version>
         <h2.version>2.2.224</h2.version>
         <junit.version>5.11.4</junit.version>
-        <sirblobman.core.version>2.9-20251215.173206-57</sirblobman.core.version>
-        <enthusia.teleport.version>1.2.6</enthusia.teleport.version>
-        <enthusia.tags.version>2.1.0</enthusia.tags.version>
     </properties>
 
     <repositories>
@@ -27,12 +24,8 @@
             <url>https://repo.papermc.io/repository/maven-public/</url>
         </repository>
         <repository>
-            <id>jitpack</id>
-            <url>https://jitpack.io</url>
-        </repository>
-        <repository>
-            <id>sirblobman-public</id>
-            <url>https://nexus.sirblobman.xyz/public/</url>
+            <id>plan-releases</id>
+            <url>https://repo.playeranalytics.net/releases</url>
         </repository>
     </repositories>
 
@@ -44,38 +37,8 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>org.enthusia</groupId>
-            <artifactId>enthusia-teleport</artifactId>
-            <version>${enthusia.teleport.version}</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.enthusia</groupId>
-            <artifactId>EnthusiaTags</artifactId>
-            <version>${enthusia.tags.version}</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.github.MilkBowl</groupId>
-            <artifactId>VaultAPI</artifactId>
-            <version>1.7.1</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.github.sirblobman.api</groupId>
-            <artifactId>core</artifactId>
-            <version>${sirblobman.core.version}</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.github.sirblobman.combatlogx</groupId>
-            <artifactId>api</artifactId>
-            <version>11.6-SNAPSHOT</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.github.plan-player-analytics</groupId>
-            <artifactId>Plan</artifactId>
+            <groupId>com.djrapitops</groupId>
+            <artifactId>plan-api</artifactId>
             <version>${plan.api.version}</version>
             <scope>provided</scope>
         </dependency>
