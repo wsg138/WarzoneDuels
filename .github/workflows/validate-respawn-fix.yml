@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   validate-and-apply:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'agent/apply-respawn-lifecycle-fix'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'agent/validate-respawn-lifecycle-v2'
     runs-on: ubuntu-latest
     steps:
       - name: Check out validation branch
@@ -34,10 +34,7 @@ jobs:
           rm -f .validation-trigger
 
       - name: Prepare compile-only validation dependencies
-        shell: bash
-        run: |
-          git show origin/agent/fix-defeated-respawn-guard:scripts/prepare_validation_dependencies.sh > /tmp/prepare-validation-dependencies.sh
-          bash /tmp/prepare-validation-dependencies.sh
+        run: bash scripts/prepare_validation_dependencies.sh
 
       - name: Check patch integrity
         run: git diff --check
