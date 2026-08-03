@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   validate-and-apply:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'agent/validate-respawn-lifecycle-v5'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'agent/validate-respawn-lifecycle-v6'
     runs-on: ubuntu-latest
     steps:
       - name: Check out validation branch
