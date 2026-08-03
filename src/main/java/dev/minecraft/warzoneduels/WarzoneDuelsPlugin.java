@@ -32,9 +32,9 @@ import dev.minecraft.warzoneduels.app.StatsService;
 import dev.minecraft.warzoneduels.port.EconomyPort;
 import dev.minecraft.warzoneduels.port.SpawnPort;
 import dev.minecraft.warzoneduels.port.CombatTagPort;
-import net.milkbowl.vault.economy.Economy;
 import org.bukkit.Bukkit;
 import org.bukkit.command.PluginCommand;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -51,7 +51,7 @@ public class WarzoneDuelsPlugin extends JavaPlugin {
     public void onEnable() {
         saveDefaultConfig();
 
-        EconomyPort economyPort = new VaultEconomyPort(setupEconomy(), getConfig().getBoolean("economy.enable-wagers", true));
+        EconomyPort economyPort = new VaultEconomyPort(setupEconomy(), getConfig().getBoolean("economy.enable-wagers", true), getLogger());
         SpawnPort spawnPort = new EnthusiaSpawnPort(getLogger());
         RuntimeStateStore runtimeStateStore = new RuntimeStateStore(this);
         LoadoutArchiveStore loadoutArchiveStore = new LoadoutArchiveStore(this);
@@ -106,8 +106,8 @@ public class WarzoneDuelsPlugin extends JavaPlugin {
         if (getConfig().getBoolean("plan.enabled", true)) {
             try {
                 new PlanHook(this, activeDuelService, statsService, analyticsService).hookIntoPlan();
-            } catch (NoClassDefFoundError ignored) {
-                getLogger().info("Plan is not installed; duel analytics integration disabled.");
+            } catch (LinkageError | RuntimeException ex) {
+                getLogger().warning("Plan integration could not start; WarzoneDuels will continue without it: " + ex.getMessage());
             }
         }
 
@@ -174,15 +174,20 @@ public class WarzoneDuelsPlugin extends JavaPlugin {
         return activeArenaTerrainService;
     }
 
-    private Economy setupEconomy() {
-        if (Bukkit.getPluginManager().getPlugin("Vault") == null) {
+    private Object setupEconomy() {
+        Plugin vault = Bukkit.getPluginManager().getPlugin("Vault");
+        if (vault == null || !vault.isEnabled()) {
             return null;
         }
-        RegisteredServiceProvider<Economy> provider = Bukkit.getServicesManager().getRegistration(Economy.class);
-        if (provider == null) {
+        try {
+            Class<?> economyClass = Class.forName("net.milkbowl.vault.economy.Economy", true, vault.getClass().getClassLoader());
+            @SuppressWarnings({"rawtypes", "unchecked"})
+            RegisteredServiceProvider<?> provider = Bukkit.getServicesManager().getRegistration((Class) economyClass);
+            return provider == null ? null : provider.getProvider();
+        } catch (ClassNotFoundException | LinkageError | RuntimeException ex) {
+            getLogger().warning("Vault economy API is unavailable; duel wagers are disabled: " + ex.getMessage());
             return null;
         }
-        return provider.getProvider();
     }
 
     private boolean isServerStopping() {

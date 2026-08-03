@@ -1,7 +1,6 @@
 package dev.minecraft.warzoneduels.adapter.plan;
 
 import dev.minecraft.warzoneduels.WarzoneDuelsPlugin;
-import com.djrapitops.plan.capability.CapabilityService;
 import com.djrapitops.plan.delivery.web.resolver.MimeType;
 import com.djrapitops.plan.delivery.web.resolver.Resolver;
 import com.djrapitops.plan.delivery.web.resolver.Response;
@@ -61,9 +60,6 @@ public final class WarzoneDuelsPlanResolver implements Resolver {
     @Override
     public boolean canAccess(Request request) {
         WebUser user = request.getUser().orElse(new WebUser(""));
-        if (CapabilityService.getInstance().hasCapability("PAGE_EXTENSION_USER_PERMISSIONS")) {
-            return user.hasPermission("page.server");
-        }
         return user.hasPermission("page.server");
     }
 
