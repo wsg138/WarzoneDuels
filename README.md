@@ -1,6 +1,10 @@
 # WarzoneDuels
 
-Death duel plugin with arena setup, loadout restore, vault rewards, stats, and optional server integrations.
+Death-duel plugin for Enthusia SMP with configurable arena rules, non-keep-inventory victor's spoils, optional Vault wagers, durable reconnect/recovery behavior, spectator/watch mode, terrain snapshots, and duel statistics.
+
+For the current **player-facing Enthusia SMP behavior**—challenge setup, building/explosive/item rules, wagers, spoils, disconnect forfeits, draw behavior, spectating, and stats—see **[`PLAYER_GUIDE.md`](PLAYER_GUIDE.md)**.
+
+The player guide is the preferred source for future public-wiki work. It also identifies deployment-level features that must be confirmed before advertising them, such as Forest/Desert terrain snapshots and ordinary-player spectator permissions.
 
 ## Build
 
