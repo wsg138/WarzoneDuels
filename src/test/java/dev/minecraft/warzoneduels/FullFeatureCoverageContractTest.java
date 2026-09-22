@@ -30,7 +30,7 @@ final class FullFeatureCoverageContractTest {
         coverage.put("arena footprint bounds and packed membership", List.of(
                 "src/test/java/dev/minecraft/warzoneduels/domain/terrain/ArenaFootprintTest.java"
         ));
-        coverage.put("spoils ownership and defensive item copies", List.of(
+        coverage.put("spoils metadata null filtering and list isolation", List.of(
                 "src/test/java/dev/minecraft/warzoneduels/domain/spoils/SpoilsEntryTest.java"
         ));
         coverage.put("typed teleport allowances", List.of(
