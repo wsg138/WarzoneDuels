@@ -53,7 +53,7 @@ final class ArenaFootprintTest {
         ArenaFootprint emptyBlocks = new ArenaFootprint("world", 0, 0, 0, 0, 0, 0, List.of(), Set.of());
         ArenaFootprint populated = new ArenaFootprint(
                 "world", 0, 0, 0, 0, 0, 0,
-                List.of(new FootprintBlock(0, 0, 0, "minecraft:stone", null)),
+                List.of(new FootprintBlock(0, 0, 0)),
                 Set.of(pack(0, 0, 0))
         );
 
