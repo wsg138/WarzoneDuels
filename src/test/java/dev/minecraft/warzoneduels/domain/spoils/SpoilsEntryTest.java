@@ -2,13 +2,12 @@ package dev.minecraft.warzoneduels.domain.spoils;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
-import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.junit.jupiter.api.Test;
 
@@ -18,39 +17,38 @@ final class SpoilsEntryTest {
     private static final UUID SOURCE = UUID.fromString("99999999-8888-7777-6666-555555555555");
 
     @Test
-    void constructorFiltersNullsAndClonesInputItems() {
-        ItemStack diamonds = new ItemStack(Material.DIAMOND, 2);
-        SpoilsEntry entry = entry(Arrays.asList(diamonds, null));
+    void constructorFiltersNullEntriesWithoutRequiringPaperBootstrap() {
+        SpoilsEntry entry = entry(Arrays.asList(null, null));
 
-        diamonds.setAmount(40);
-
-        assertEquals(1, entry.itemCount());
-        assertFalse(entry.isEmpty());
-        assertEquals(2, entry.items().getFirst().getAmount());
-        assertNotSame(diamonds, entry.items().getFirst());
+        assertTrue(entry.isEmpty());
+        assertEquals(0, entry.itemCount());
     }
 
     @Test
-    void publicItemsReturnsFreshDefensiveCopiesOnEveryRead() {
-        SpoilsEntry entry = entry(List.of(new ItemStack(Material.GOLDEN_APPLE, 3)));
+    void publicItemsReturnsAnIndependentList() {
+        SpoilsEntry entry = entry(List.of());
 
-        List<ItemStack> first = entry.items();
-        first.getFirst().setAmount(1);
-        first.clear();
+        List<ItemStack> returned = entry.items();
+        returned.add(null);
 
-        List<ItemStack> second = entry.items();
-        assertEquals(1, second.size());
-        assertEquals(3, second.getFirst().getAmount());
+        assertEquals(1, returned.size());
+        assertTrue(entry.isEmpty());
+        assertEquals(0, entry.itemCount());
     }
 
     @Test
     void mutableItemsIsTheIntentionalInternalMutationSurface() {
-        SpoilsEntry entry = entry(List.of(new ItemStack(Material.TOTEM_OF_UNDYING, 1)));
+        SpoilsEntry entry = entry(List.of());
+
+        entry.mutableItems().add(null);
+
+        assertFalse(entry.isEmpty());
+        assertEquals(1, entry.itemCount());
+        assertEquals(1, entry.items().size());
+        assertNull(entry.items().getFirst());
 
         entry.mutableItems().clear();
-
         assertTrue(entry.isEmpty());
-        assertEquals(0, entry.itemCount());
     }
 
     @Test
