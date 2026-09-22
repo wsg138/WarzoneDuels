@@ -12,7 +12,7 @@ For a clean verification pass:
 mvn clean test
 ```
 
-Surefire output is written under `target/surefire-reports/`. `MANUAL_TESTING.md` remains the separate live-server acceptance checklist for gameplay that requires real Paper/world/player behavior.
+Surefire output is written under `target/surefire-reports/`. Pull requests also run `.github/workflows/tests.yml`, which executes a clean Maven test pass on Java 21. `MANUAL_TESTING.md` remains the separate live-server acceptance checklist for gameplay that requires real Paper/world/player behavior.
 
 ## Automated coverage currently protecting
 
@@ -21,7 +21,7 @@ The repository now has direct regression evidence for:
 - duel settings, build modes, explosive visibility, item cooldown formatting and copy independence;
 - win/loss/draw/disconnect-forfeit statistics and streak accounting;
 - arena footprint bounds and packed block membership, including negative coordinates;
-- spoils metadata, null filtering and defensive `ItemStack` copying;
+- spoils metadata, null filtering, returned-list isolation and the explicit mutable-list surface;
 - typed teleport allowances;
 - spectator session persistence and inventory restoration;
 - permission namespaces, parent relationships and policy;
@@ -40,6 +40,7 @@ WarzoneDuels is still far from exhaustive. High-value remaining automated covera
 - GUI command/listener navigation and authorization;
 - CombatLogX, Vault, Spawn, Tags and other integration behavior at their real boundaries;
 - listener enforcement for damage, death, block rules, item restrictions and protected explosives;
+- per-item `ItemStack.clone()` isolation in spoils, which requires Paper registry bootstrap or a trustworthy Paper-aware harness;
 - plugin enable/disable wiring and real multi-player match flow.
 
 Use pure unit tests where possible. Use mocks only around genuine boundaries; do not mock an optional plugin into existence simply to claim compatibility. Gameplay behavior that depends on Paper internals, real worlds, networking, or multiple live players belongs in the manual/live-server acceptance lane unless a trustworthy integration harness exists.
