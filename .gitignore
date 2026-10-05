@@ -1,4 +1,7 @@
 target/
+.m2/
+.claude/spear-state.json
+.claude/spear-history.jsonl
 *.jar
 purpurBlocks.yml
 Updated External Configs.txt

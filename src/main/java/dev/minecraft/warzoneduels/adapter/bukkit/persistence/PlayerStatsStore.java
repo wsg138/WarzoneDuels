@@ -63,6 +63,12 @@ public final class PlayerStatsStore {
             playerStats.setDisconnectForfeitLosses(playerSection.getInt("disconnect-forfeit-losses", 0));
             playerStats.setCurrentWinStreak(playerSection.getInt("current-win-streak", 0));
             playerStats.setBestWinStreak(playerSection.getInt("best-win-streak", 0));
+            playerStats.setChallengesSent(playerSection.getInt("advancements.challenges-sent", 0));
+            playerStats.setSpoilsClaims(playerSection.getInt("advancements.spoils-claims", 0));
+            playerStats.setMutualDraws(playerSection.getInt("advancements.mutual-draws", 0));
+            playerStats.setCustomRulesWins(playerSection.getInt("advancements.custom-rules-wins", 0));
+            playerStats.setRestrictedMobilityWins(playerSection.getInt("advancements.restricted-mobility-wins", 0));
+            playerStats.setLowHealthWins(playerSection.getInt("advancements.low-health-wins", 0));
             stats.put(playerId, playerStats);
         }
         return stats;
@@ -104,7 +110,13 @@ public final class PlayerStatsStore {
                 playerStats.draws(),
                 playerStats.disconnectForfeitLosses(),
                 playerStats.currentWinStreak(),
-                playerStats.bestWinStreak()
+                playerStats.bestWinStreak(),
+                playerStats.challengesSent(),
+                playerStats.spoilsClaims(),
+                playerStats.mutualDraws(),
+                playerStats.customRulesWins(),
+                playerStats.restrictedMobilityWins(),
+                playerStats.lowHealthWins()
             ))
             .toList();
     }
@@ -122,6 +134,12 @@ public final class PlayerStatsStore {
             playerSection.set("disconnect-forfeit-losses", playerStats.disconnectForfeitLosses());
             playerSection.set("current-win-streak", playerStats.currentWinStreak());
             playerSection.set("best-win-streak", playerStats.bestWinStreak());
+            playerSection.set("advancements.challenges-sent", playerStats.challengesSent());
+            playerSection.set("advancements.spoils-claims", playerStats.spoilsClaims());
+            playerSection.set("advancements.mutual-draws", playerStats.mutualDraws());
+            playerSection.set("advancements.custom-rules-wins", playerStats.customRulesWins());
+            playerSection.set("advancements.restricted-mobility-wins", playerStats.restrictedMobilityWins());
+            playerSection.set("advancements.low-health-wins", playerStats.lowHealthWins());
         }
         saveAtomic(yaml);
     }
@@ -155,7 +173,13 @@ public final class PlayerStatsStore {
         int draws,
         int disconnectForfeitLosses,
         int currentWinStreak,
-        int bestWinStreak
+        int bestWinStreak,
+        int challengesSent,
+        int spoilsClaims,
+        int mutualDraws,
+        int customRulesWins,
+        int restrictedMobilityWins,
+        int lowHealthWins
     ) {
     }
 }

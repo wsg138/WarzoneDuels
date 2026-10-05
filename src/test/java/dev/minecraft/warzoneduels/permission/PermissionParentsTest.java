@@ -30,6 +30,7 @@ class PermissionParentsTest {
         assertTrue(children(spectate).get("warzoneduels.spectate.use"));
         assertTrue(children(spectate).get("warzoneduels.spectate.leave"));
         assertTrue(children(admin).get("warzoneduels.command"));
+        assertTrue(children(admin).get("warzoneduels.admin.modes"));
         assertTrue(children(admin).get("warzoneduels.spectate"));
         assertTrue(children(admin).get("warzoneduels.admin.arena"));
         assertTrue(children(arena).get("warzoneduels.admin.arena.setspectator"));

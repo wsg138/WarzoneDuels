@@ -6,13 +6,13 @@
 
     <groupId>dev.minecraft</groupId>
     <artifactId>WarzoneDuels</artifactId>
-    <version>1.0.1</version>
+    <version>1.0.5</version>
     <packaging>jar</packaging>
 
     <properties>
-        <maven.compiler.source>21</maven.compiler.source>
-        <maven.compiler.target>21</maven.compiler.target>
+        <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <paper.api.version>26.2.build.123-stable</paper.api.version>
         <plan.api.version>5.7-R0.2</plan.api.version>
         <h2.version>2.2.224</h2.version>
         <junit.version>5.11.4</junit.version>
@@ -33,7 +33,7 @@
         <dependency>
             <groupId>io.papermc.paper</groupId>
             <artifactId>paper-api</artifactId>
-            <version>1.21.11-R0.1-SNAPSHOT</version>
+            <version>${paper.api.version}</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -85,5 +85,14 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>paper-26.3</id>
+            <properties>
+                <paper.api.version>26.3.build.8-alpha</paper.api.version>
+            </properties>
+        </profile>
+    </profiles>
 
 </project>

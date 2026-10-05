@@ -6,6 +6,8 @@ import dev.minecraft.warzoneduels.adapter.bukkit.reset.ArenaSnapshot;
 import dev.minecraft.warzoneduels.adapter.bukkit.reset.SavedBlockState;
 import dev.minecraft.warzoneduels.domain.ActiveDuel;
 import dev.minecraft.warzoneduels.domain.DuelSettings;
+import dev.minecraft.warzoneduels.domain.DuelMatchType;
+import dev.minecraft.warzoneduels.domain.MatchTeam;
 import dev.minecraft.warzoneduels.domain.MatchParticipant;
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.ConfigurationSection;
@@ -52,7 +54,15 @@ public final class RuntimeStateStore {
     }
 
     public void queueActiveDuelSave(ActiveDuel duel, long delayTicks) {
-        SerializedActiveDuel snapshot = serializeActiveDuel(duel);
+        queueActiveDuelSave(duel, Set.of(), delayTicks);
+    }
+
+    public void queueActiveDuelSave(ActiveDuel duel, Set<UUID> eliminatedIds) {
+        queueActiveDuelSave(duel, eliminatedIds, ACTIVE_SAVE_DEBOUNCE_TICKS);
+    }
+
+    public void queueActiveDuelSave(ActiveDuel duel, Set<UUID> eliminatedIds, long delayTicks) {
+        SerializedActiveDuel snapshot = serializeActiveDuel(duel, eliminatedIds);
         synchronized (lock) {
             runtimeRevision++;
             pendingActiveDuel = snapshot;
@@ -69,6 +79,10 @@ public final class RuntimeStateStore {
     }
 
     public void saveActiveDuelSync(ActiveDuel duel) {
+        saveActiveDuelSync(duel, Set.of());
+    }
+
+    public void saveActiveDuelSync(ActiveDuel duel, Set<UUID> eliminatedIds) {
         synchronized (lock) {
             runtimeRevision++;
             pendingActiveDuel = null;
@@ -77,7 +91,7 @@ public final class RuntimeStateStore {
                 queuedActiveSaveTask = null;
             }
         }
-        writeActiveDuel(serializeActiveDuel(duel));
+        writeActiveDuel(serializeActiveDuel(duel, eliminatedIds));
     }
 
     public PersistedRuntime loadActiveDuel() {
@@ -89,13 +103,11 @@ public final class RuntimeStateStore {
             if (!yaml.getBoolean("active")) {
                 return new PersistedRuntime(null, false);
             }
-            MatchParticipant one = readParticipant(yaml.getConfigurationSection("participant-one"));
-            MatchParticipant two = readParticipant(yaml.getConfigurationSection("participant-two"));
-            if (one == null || two == null) {
+            DuelSettings settings = readSettings(yaml.getConfigurationSection("settings"));
+            ActiveDuel duel = readActiveDuel(yaml, settings);
+            if (duel == null) {
                 return new PersistedRuntime(null, false);
             }
-            DuelSettings settings = readSettings(yaml.getConfigurationSection("settings"));
-            ActiveDuel duel = new ActiveDuel(one, two, settings, yaml.getLong("started-at"));
             duel.setWagerHeld(yaml.getBoolean("wager-held"));
             duel.setWagerPot(yaml.getDouble("wager-pot"));
             for (String value : yaml.getStringList("placed-blocks")) {
@@ -105,7 +117,11 @@ public final class RuntimeStateStore {
                 }
             }
             duel.setArenaSnapshot(readArenaSnapshot(yaml.getConfigurationSection("arena-snapshot")));
-            return new PersistedRuntime(duel, resumeMarkerFile.exists());
+            Set<UUID> eliminatedIds = yaml.getStringList("eliminated-participants").stream()
+                .map(this::safeUuid)
+                .filter(id -> id != null && duel.contains(id))
+                .collect(Collectors.toUnmodifiableSet());
+            return new PersistedRuntime(duel, resumeMarkerFile.exists(), eliminatedIds);
         } catch (RuntimeException ex) {
             plugin.getLogger().warning("Ignoring corrupt runtime duel state: " + ex.getMessage());
             return new PersistedRuntime(null, false);
@@ -146,7 +162,9 @@ public final class RuntimeStateStore {
     }
 
     public void saveRecoveryTeleportIds(Set<UUID> playerIds) {
-        YamlConfiguration yaml = new YamlConfiguration();
+        YamlConfiguration yaml = recoveryFile.exists()
+            ? YamlConfiguration.loadConfiguration(recoveryFile)
+            : new YamlConfiguration();
         yaml.set("players", playerIds.stream().map(UUID::toString).toList());
         save(yaml, recoveryFile);
     }
@@ -169,13 +187,49 @@ public final class RuntimeStateStore {
         YamlConfiguration yaml = YamlConfiguration.loadConfiguration(recoveryFile);
         Set<String> remaining = new java.util.HashSet<>(yaml.getStringList("players"));
         remaining.remove(playerId.toString());
-        if (remaining.isEmpty()) {
+        if (remaining.isEmpty() && yaml.getStringList("loadout-restores").isEmpty()) {
             if (!recoveryFile.delete()) {
                 plugin.getLogger().warning("Failed to clear recovery teleport file.");
             }
             return;
         }
         yaml.set("players", remaining.stream().toList());
+        save(yaml, recoveryFile);
+    }
+
+    public void savePendingLoadoutRestoreIds(Set<UUID> playerIds) {
+        YamlConfiguration yaml = recoveryFile.exists()
+            ? YamlConfiguration.loadConfiguration(recoveryFile)
+            : new YamlConfiguration();
+        yaml.set("loadout-restores", playerIds.stream().map(UUID::toString).toList());
+        save(yaml, recoveryFile);
+    }
+
+    public Set<UUID> loadPendingLoadoutRestoreIds() {
+        if (!recoveryFile.exists()) {
+            return Set.of();
+        }
+        YamlConfiguration yaml = YamlConfiguration.loadConfiguration(recoveryFile);
+        return yaml.getStringList("loadout-restores").stream()
+            .map(this::safeUuid)
+            .filter(java.util.Objects::nonNull)
+            .collect(Collectors.toSet());
+    }
+
+    public void clearPendingLoadoutRestoreId(UUID playerId) {
+        if (!recoveryFile.exists()) {
+            return;
+        }
+        YamlConfiguration yaml = YamlConfiguration.loadConfiguration(recoveryFile);
+        Set<String> remaining = new java.util.HashSet<>(yaml.getStringList("loadout-restores"));
+        remaining.remove(playerId.toString());
+        if (remaining.isEmpty() && yaml.getStringList("players").isEmpty()) {
+            if (!recoveryFile.delete()) {
+                plugin.getLogger().warning("Failed to clear recovery file.");
+            }
+            return;
+        }
+        yaml.set("loadout-restores", remaining.stream().toList());
         save(yaml, recoveryFile);
     }
 
@@ -202,19 +256,24 @@ public final class RuntimeStateStore {
         writeActiveDuel(snapshot);
     }
 
-    private SerializedActiveDuel serializeActiveDuel(ActiveDuel duel) {
+    private SerializedActiveDuel serializeActiveDuel(ActiveDuel duel, Set<UUID> eliminatedIds) {
         if (duel == null) {
             return null;
         }
         return new SerializedActiveDuel(
-            serializeParticipant(duel.participantOne()),
-            serializeParticipant(duel.participantTwo()),
+            duel.matchType().name(),
+            duel.teamOne().id(),
+            duel.teamOne().participants().stream().map(this::serializeParticipant).toList(),
+            duel.teamTwo().id(),
+            duel.teamTwo().participants().stream().map(this::serializeParticipant).toList(),
             serializeSettings(duel.settings()),
             duel.startedAtEpochMs(),
+            duel.duelDeadlineEpochMs(),
             duel.isWagerHeld(),
             duel.getWagerPot(),
             duel.placedBlocks().stream().map(this::serializeBlockKey).toList(),
-            serializeArenaSnapshot(duel.arenaSnapshot())
+            serializeArenaSnapshot(duel.arenaSnapshot()),
+            eliminatedIds.stream().filter(duel::contains).map(UUID::toString).sorted().toList()
         );
     }
 
@@ -275,13 +334,19 @@ public final class RuntimeStateStore {
         YamlConfiguration yaml = new YamlConfiguration();
         yaml.set("active", duel != null);
         if (duel != null) {
-            writeParticipant(yaml.createSection("participant-one"), duel.participantOne());
-            writeParticipant(yaml.createSection("participant-two"), duel.participantTwo());
+            yaml.set("schema-version", 2);
+            yaml.set("match-type", duel.matchType());
+            writeTeam(yaml.createSection("team-one"), duel.teamOneId(), duel.teamOneParticipants());
+            writeTeam(yaml.createSection("team-two"), duel.teamTwoId(), duel.teamTwoParticipants());
+            writeParticipant(yaml.createSection("participant-one"), duel.teamOneParticipants().get(0));
+            writeParticipant(yaml.createSection("participant-two"), duel.teamTwoParticipants().get(0));
             writeSettings(yaml.createSection("settings"), duel.settings());
             yaml.set("started-at", duel.startedAtEpochMs());
+            yaml.set("duel-deadline-epoch-ms", duel.duelDeadlineEpochMs());
             yaml.set("wager-held", duel.wagerHeld());
             yaml.set("wager-pot", duel.wagerPot());
             yaml.set("placed-blocks", duel.placedBlocks());
+            yaml.set("eliminated-participants", duel.eliminatedParticipantIds());
             writeArenaSnapshot(yaml.createSection("arena-snapshot"), duel.arenaSnapshot());
         }
         save(yaml, runtimeFile);
@@ -292,6 +357,14 @@ public final class RuntimeStateStore {
         section.set("name", participant.name());
         section.set("draw-requested", participant.drawRequested());
         section.set("disconnect-deadline", participant.disconnectDeadlineEpochMs());
+    }
+
+    private void writeTeam(ConfigurationSection section, UUID teamId, java.util.List<SerializedParticipant> participants) {
+        section.set("id", teamId.toString());
+        ConfigurationSection participantSection = section.createSection("participants");
+        for (int index = 0; index < participants.size(); index++) {
+            writeParticipant(participantSection.createSection("member-" + index), participants.get(index));
+        }
     }
 
     private void writeSettings(ConfigurationSection section, SerializedSettings settings) {
@@ -334,6 +407,54 @@ public final class RuntimeStateStore {
             participant.setDisconnectDeadlineEpochMs(section.getLong("disconnect-deadline"));
         }
         return participant;
+    }
+
+    private ActiveDuel readActiveDuel(YamlConfiguration yaml, DuelSettings settings) {
+        if (yaml.getInt("schema-version", 1) >= 2) {
+            MatchTeam teamOne = readTeam(yaml.getConfigurationSection("team-one"));
+            MatchTeam teamTwo = readTeam(yaml.getConfigurationSection("team-two"));
+            if (teamOne == null || teamTwo == null) {
+                return null;
+            }
+            DuelMatchType matchType = safeEnum(
+                DuelMatchType.class,
+                yaml.getString("match-type"),
+                teamOne.size() == 1 ? DuelMatchType.NORMAL : DuelMatchType.PARTY
+            );
+            ActiveDuel duel = new ActiveDuel(matchType, teamOne, teamTwo, settings, yaml.getLong("started-at"));
+            if (yaml.contains("duel-deadline-epoch-ms")) {
+                duel.setDuelDeadlineEpochMs(yaml.getLong("duel-deadline-epoch-ms"));
+            }
+            return duel;
+        }
+        MatchParticipant one = readParticipant(yaml.getConfigurationSection("participant-one"));
+        MatchParticipant two = readParticipant(yaml.getConfigurationSection("participant-two"));
+        return one == null || two == null ? null : new ActiveDuel(one, two, settings, yaml.getLong("started-at"));
+    }
+
+    private MatchTeam readTeam(ConfigurationSection section) {
+        if (section == null) {
+            return null;
+        }
+        UUID teamId = safeUuid(section.getString("id"));
+        ConfigurationSection participantSection = section.getConfigurationSection("participants");
+        if (teamId == null || participantSection == null) {
+            return null;
+        }
+        java.util.List<String> keys = participantSection.getKeys(false).stream().sorted().toList();
+        java.util.List<MatchParticipant> participants = new java.util.ArrayList<>();
+        for (String key : keys) {
+            MatchParticipant participant = readParticipant(participantSection.getConfigurationSection(key));
+            if (participant == null) {
+                return null;
+            }
+            participants.add(participant);
+        }
+        try {
+            return new MatchTeam(teamId, participants);
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
     }
 
     private DuelSettings readSettings(ConfigurationSection section) {
@@ -465,18 +586,30 @@ public final class RuntimeStateStore {
         }
     }
 
-    public record PersistedRuntime(ActiveDuel activeDuel, boolean resumeAllowed) {
+    public record PersistedRuntime(ActiveDuel activeDuel, boolean resumeAllowed, Set<UUID> eliminatedParticipantIds) {
+        public PersistedRuntime {
+            eliminatedParticipantIds = Set.copyOf(eliminatedParticipantIds);
+        }
+
+        public PersistedRuntime(ActiveDuel activeDuel, boolean resumeAllowed) {
+            this(activeDuel, resumeAllowed, Set.of());
+        }
     }
 
     private record SerializedActiveDuel(
-        SerializedParticipant participantOne,
-        SerializedParticipant participantTwo,
+        String matchType,
+        UUID teamOneId,
+        java.util.List<SerializedParticipant> teamOneParticipants,
+        UUID teamTwoId,
+        java.util.List<SerializedParticipant> teamTwoParticipants,
         SerializedSettings settings,
         long startedAtEpochMs,
+        Long duelDeadlineEpochMs,
         boolean wagerHeld,
         double wagerPot,
         java.util.List<String> placedBlocks,
-        Map<String, SerializedBlockState> arenaSnapshot
+        Map<String, SerializedBlockState> arenaSnapshot,
+        java.util.List<String> eliminatedParticipantIds
     ) {
     }
 

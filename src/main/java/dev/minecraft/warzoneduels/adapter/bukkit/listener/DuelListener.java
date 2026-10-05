@@ -26,6 +26,7 @@ import org.bukkit.event.block.BlockIgniteEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.block.BlockSpreadEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.entity.EntityDamageByBlockEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
@@ -275,9 +276,11 @@ public final class DuelListener implements Listener {
         if (!isTntMinecart(event.getVehicle())) {
             return;
         }
-        if (!(event.getAttacker() instanceof Player attacker) || !duelService.isInActiveDuel(attacker.getUniqueId())) {
+        Player attacker = resolveAttackingPlayer(event.getAttacker());
+        if (attacker == null || !duelService.isInActiveDuel(attacker.getUniqueId())) {
             return;
         }
+        duelService.trackExplosionSource(event.getVehicle().getUniqueId(), Material.TNT_MINECART, attacker.getUniqueId());
         duelService.allowArenaItemSpawnAt(event.getVehicle().getLocation());
     }
 
@@ -337,6 +340,7 @@ public final class DuelListener implements Listener {
             return false;
         }
         if (duelService.canUseExplosive(Material.RESPAWN_ANCHOR, event.getPlayer())) {
+            duelService.trackBlockExplosionSource(event.getClickedBlock(), event.getPlayer().getUniqueId());
             return true;
         }
         event.setCancelled(true);
@@ -384,7 +388,9 @@ public final class DuelListener implements Listener {
             if (player != null) {
                 duelService.sendBlockedCombatItemMessage(player);
             }
+            return;
         }
+        duelService.trackExplosionSource(event.getEntity().getUniqueId(), material, player.getUniqueId());
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -472,12 +478,13 @@ public final class DuelListener implements Listener {
             event.setYield(0F);
             return;
         }
-        duelService.clearExplosionSource(entity.getUniqueId());
         if (!duelService.isExplosiveMaterialAllowed(material)) {
             event.setCancelled(true);
             vanillaEntityExplosionBlocks.remove(entity.getUniqueId());
+            duelService.clearExplosionSourceNextTick(entity.getUniqueId());
             return;
         }
+        duelService.clearExplosionSourceNextTick(entity.getUniqueId());
         event.setCancelled(false);
         event.setYield(0F);
         List<org.bukkit.block.Block> vanillaBlocks = vanillaEntityExplosionBlocks.remove(entity.getUniqueId());
@@ -523,6 +530,7 @@ public final class DuelListener implements Listener {
         }
         event.setCancelled(false);
         event.setYield(0F);
+        duelService.clearBlockExplosionSourceNextTick(event.getBlock().getLocation());
         List<org.bukkit.block.Block> vanillaBlocks = vanillaBlockExplosionBlocks.remove(blockExplosionKey(event));
         List<org.bukkit.block.Block> sourceBlocks = vanillaBlocks == null ? new ArrayList<>(event.blockList()) : vanillaBlocks;
         event.blockList().clear();
@@ -540,11 +548,21 @@ public final class DuelListener implements Listener {
         if (!(event.getEntity() instanceof Player player)) {
             return;
         }
-        if (duelService.shouldCancelVictoryMomentDamage(player)
+        if (duelService.isDuelCountdownActive() && duelService.isInActiveDuel(player.getUniqueId())
+            || duelService.shouldCancelVictoryMomentDamage(player)
             || duelService.shouldBlockWatcherAction(player)
             || duelService.shouldCancelArenaSpectatorDamage(player)) {
             event.setCancelled(true);
         }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onBlockDamage(EntityDamageByBlockEvent event) {
+        if (!(event.getEntity() instanceof Player victim) || !isExplosionDamage(event)) {
+            return;
+        }
+        UUID attackerId = resolveAttributedAttackerId(event);
+        handleExplosivePlayerDamage(event, victim, attackerId);
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -560,6 +578,15 @@ public final class DuelListener implements Listener {
         }
         if (event.getEntity() instanceof EnderCrystal crystal) {
             handleCrystalDamage(event, crystal);
+            return;
+        }
+        if (isTntMinecart(event.getEntity())) {
+            Player attacker = resolveAttackingPlayer(event.getDamager());
+            if (attacker != null && duelService.isInActiveDuel(attacker.getUniqueId())) {
+                duelService.trackExplosionSource(
+                    event.getEntity().getUniqueId(), Material.TNT_MINECART, attacker.getUniqueId()
+                );
+            }
             return;
         }
         if (!(event.getEntity() instanceof Player victim)) {
@@ -588,7 +615,9 @@ public final class DuelListener implements Listener {
         if (!duelService.canUseExplosive(Material.END_CRYSTAL, attacker)) {
             event.setCancelled(true);
             duelService.sendBlockedCombatItemMessage(attacker);
+            return;
         }
+        duelService.trackExplosionSource(crystal.getUniqueId(), Material.END_CRYSTAL, attacker.getUniqueId());
     }
 
     private void handlePlayerDamage(EntityDamageByEntityEvent event, Player victim) {
@@ -603,16 +632,37 @@ public final class DuelListener implements Listener {
         if (!duelService.isInActiveDuel(victim.getUniqueId())) {
             return;
         }
-        if (attacker != null) {
-            handleAttackerDamage(event, victim, attacker);
+        if (isExplosionDamage(event)) {
+            handleExplosivePlayerDamage(event, victim, resolveAttributedAttackerId(event));
             return;
         }
-        if (event.getCause() == DamageCause.ENTITY_EXPLOSION || event.getDamager() instanceof TNTPrimed || event.getDamager() instanceof EnderCrystal) {
+        if (attacker != null) {
+            handleAttackerDamage(event, victim, attacker);
             return;
         }
         if (!(event.getDamager() instanceof Player) && duelService.isInActiveDuel(victim.getUniqueId())) {
             event.setCancelled(true);
         }
+    }
+
+    private void handleExplosivePlayerDamage(EntityDamageEvent event, Player victim, UUID attackerId) {
+        if (!duelService.isInActiveDuel(victim.getUniqueId())) {
+            return;
+        }
+        if (duelService.shouldCancelExplosiveDamage(victim, attackerId)) {
+            event.setCancelled(true);
+            return;
+        }
+        duelService.recordAttributedDamage(victim, attackerId);
+    }
+
+    private boolean isExplosionDamage(EntityDamageEvent event) {
+        return event.getCause() == DamageCause.ENTITY_EXPLOSION
+            || event.getCause() == DamageCause.BLOCK_EXPLOSION
+            || event instanceof EntityDamageByEntityEvent byEntity
+                && (byEntity.getDamager() instanceof TNTPrimed
+                    || byEntity.getDamager() instanceof EnderCrystal
+                    || isTntMinecart(byEntity.getDamager()));
     }
 
     private boolean cancelArenaShellExplosionDamage(EntityDamageByEntityEvent event, Player victim) {
@@ -640,7 +690,9 @@ public final class DuelListener implements Listener {
         }
         if (duelService.shouldCancelDamage(victim, attacker)) {
             event.setCancelled(true);
+            return;
         }
+        duelService.recordAttributedDamage(victim, attacker.getUniqueId());
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -665,7 +717,7 @@ public final class DuelListener implements Listener {
             event.setKeepLevel(true);
         }
         if (duelDeath) {
-            duelService.handleDeath(event.getEntity(), drops);
+            duelService.handleDeath(event.getEntity(), event.getEntity().getKiller(), drops);
         }
     }
 
@@ -967,6 +1019,45 @@ public final class DuelListener implements Listener {
             return player;
         }
         return null;
+    }
+
+    private UUID resolveAttributedAttackerId(EntityDamageEvent event) {
+        Entity causingEntity = event.getDamageSource().getCausingEntity();
+        Player causingPlayer = resolveAttackingPlayer(causingEntity);
+        if (causingPlayer != null) {
+            return causingPlayer.getUniqueId();
+        }
+        if (causingEntity instanceof TNTPrimed tnt && tnt.getSource() != null) {
+            Player sourcePlayer = resolveAttackingPlayer(tnt.getSource());
+            if (sourcePlayer != null) {
+                return sourcePlayer.getUniqueId();
+            }
+        }
+        if (event instanceof EntityDamageByEntityEvent byEntity) {
+            Player directPlayer = resolveAttackingPlayer(byEntity.getDamager());
+            if (directPlayer != null) {
+                return directPlayer.getUniqueId();
+            }
+            UUID trackedOwner = duelService.explosionOwner(byEntity.getDamager().getUniqueId());
+            if (trackedOwner != null) {
+                return trackedOwner;
+            }
+        }
+        if (event instanceof EntityDamageByBlockEvent byBlock) {
+            if (byBlock.getDamager() != null) {
+                UUID trackedOwner = duelService.blockExplosionOwner(byBlock.getDamager().getLocation());
+                if (trackedOwner != null) {
+                    return trackedOwner;
+                }
+            }
+            if (byBlock.getDamagerBlockState() != null) {
+                UUID trackedOwner = duelService.blockExplosionOwner(byBlock.getDamagerBlockState().getLocation());
+                if (trackedOwner != null) {
+                    return trackedOwner;
+                }
+            }
+        }
+        return duelService.blockExplosionOwner(event.getDamageSource().getSourceLocation());
     }
 
     private boolean blockWatcherAction(Player player) {

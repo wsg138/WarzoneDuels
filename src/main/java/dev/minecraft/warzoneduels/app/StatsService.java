@@ -2,11 +2,15 @@ package dev.minecraft.warzoneduels.app;
 
 import dev.minecraft.warzoneduels.adapter.bukkit.persistence.PlayerStatsStore;
 import dev.minecraft.warzoneduels.domain.ActiveDuel;
+import dev.minecraft.warzoneduels.domain.DuelAdvancementPolicy;
 import dev.minecraft.warzoneduels.domain.DuelEndReason;
+import dev.minecraft.warzoneduels.domain.DuelMatchType;
 import dev.minecraft.warzoneduels.domain.MatchParticipant;
+import dev.minecraft.warzoneduels.domain.TeamOutcomePolicy;
 import dev.minecraft.warzoneduels.domain.stats.PlayerDuelStats;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.entity.Player;
 
 import java.util.Collection;
 import java.util.Comparator;
@@ -15,13 +19,21 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 public final class StatsService {
     private final PlayerStatsStore store;
+    private final Consumer<Map<UUID, PlayerDuelStats>> saveSink;
     private final Map<UUID, PlayerDuelStats> statsByPlayerId = new ConcurrentHashMap<>();
 
     public StatsService(PlayerStatsStore store) {
         this.store = store;
+        this.saveSink = store::saveAsync;
+    }
+
+    StatsService(Consumer<Map<UUID, PlayerDuelStats>> saveSink) {
+        this.store = null;
+        this.saveSink = java.util.Objects.requireNonNull(saveSink);
     }
 
     public void enable() {
@@ -35,28 +47,66 @@ public final class StatsService {
     }
 
     public void recordMatchResult(ActiveDuel duel, UUID winnerId, DuelEndReason reason) {
+        recordMatchResult(duel, winnerId, reason, true);
+    }
+
+    public void recordMatchResult(ActiveDuel duel, UUID winnerId, DuelEndReason reason, boolean advancementEvidenceAllowed) {
         if (duel == null) {
             return;
         }
-        MatchParticipant participantOne = duel.participantOne();
-        MatchParticipant participantTwo = duel.participantTwo();
         if (reason == DuelEndReason.DRAW) {
-            stats(participantOne.playerId(), participantOne.name()).recordDraw();
-            stats(participantTwo.playerId(), participantTwo.name()).recordDraw();
+            for (MatchParticipant participant : duel.participants()) {
+                stats(participant.playerId(), participant.name()).recordDraw();
+            }
             save();
             return;
         }
-        if (winnerId == null) {
+        if (winnerId == null || !duel.contains(winnerId)) {
             return;
         }
 
-        MatchParticipant winner = duel.participant(winnerId);
-        MatchParticipant loser = duel.other(winnerId);
-        if (winner == null || loser == null) {
-            return;
+        TeamOutcomePolicy.Outcome outcome = TeamOutcomePolicy.outcome(duel, winnerId);
+        boolean restrictedMobility = advancementEvidenceAllowed && DuelAdvancementPolicy.isRestrictedMobilityWin(duel.settings(), reason);
+        for (MatchParticipant winner : outcome.winners()) {
+            PlayerDuelStats winnerStats = stats(winner.playerId(), winner.name());
+            winnerStats.recordWin();
+            if (restrictedMobility) {
+                winnerStats.recordRestrictedMobilityWin();
+            }
         }
-        stats(winner.playerId(), winner.name()).recordWin();
-        stats(loser.playerId(), loser.name()).recordLoss(reason == DuelEndReason.DISCONNECT_TIMEOUT);
+        for (MatchParticipant loser : outcome.losers()) {
+            stats(loser.playerId(), loser.name()).recordLoss(reason == DuelEndReason.DISCONNECT_TIMEOUT);
+        }
+
+        MatchParticipant challenger = duel.participantOne();
+        if (advancementEvidenceAllowed && DuelAdvancementPolicy.isCustomRulesChallengerWin(
+            duel.matchType(), challenger.playerId(), winnerId, duel.settings(), reason
+        )) {
+            stats(challenger.playerId(), challenger.name()).recordCustomRulesWin();
+        }
+
+        if (advancementEvidenceAllowed && duel.matchType() == DuelMatchType.NORMAL && reason == DuelEndReason.KILL) {
+            Player onlineWinner = Bukkit.getPlayer(winnerId);
+            if (onlineWinner != null
+                && DuelAdvancementPolicy.isLowHealthWin(duel.matchType(), reason, onlineWinner.getHealth())) {
+                stats(winnerId, onlineWinner.getName()).recordLowHealthWin();
+            }
+        }
+        save();
+    }
+
+    public void recordChallengeSent(UUID playerId, String name) {
+        stats(playerId, name).recordChallengeSent();
+        save();
+    }
+
+    public void recordSpoilsClaim(UUID playerId, String name) {
+        stats(playerId, name).recordSpoilsClaim();
+        save();
+    }
+
+    public void recordMutualDraw(UUID playerId, String name) {
+        stats(playerId, name).recordMutualDraw();
         save();
     }
 
@@ -132,6 +182,6 @@ public final class StatsService {
     }
 
     private void save() {
-        store.saveAsync(statsByPlayerId);
+        saveSink.accept(statsByPlayerId);
     }
 }

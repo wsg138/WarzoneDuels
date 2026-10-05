@@ -11,12 +11,23 @@ import dev.minecraft.warzoneduels.domain.ActiveDuel;
 import dev.minecraft.warzoneduels.domain.ArenaDefinition;
 import dev.minecraft.warzoneduels.domain.BuilderSession;
 import dev.minecraft.warzoneduels.domain.DuelEndReason;
+import dev.minecraft.warzoneduels.domain.DuelDurationPolicy;
+import dev.minecraft.warzoneduels.domain.DuelChallenge;
+import dev.minecraft.warzoneduels.domain.DuelChallengeStatus;
 import dev.minecraft.warzoneduels.domain.DuelMapOption;
+import dev.minecraft.warzoneduels.domain.DuelMatchType;
+import dev.minecraft.warzoneduels.domain.DuelParty;
 import dev.minecraft.warzoneduels.domain.DuelRequest;
 import dev.minecraft.warzoneduels.domain.DuelRuntimeState;
 import dev.minecraft.warzoneduels.domain.DuelSettings;
+import dev.minecraft.warzoneduels.domain.ExplosiveCombatPolicy;
 import dev.minecraft.warzoneduels.domain.LoadoutSnapshot;
 import dev.minecraft.warzoneduels.domain.MatchParticipant;
+import dev.minecraft.warzoneduels.domain.MatchTeam;
+import dev.minecraft.warzoneduels.domain.TeamOutcomePolicy;
+import dev.minecraft.warzoneduels.domain.TeamEliminationOutcome;
+import dev.minecraft.warzoneduels.domain.TeamMatchPolicy;
+import dev.minecraft.warzoneduels.domain.TeamSpoilsPolicy;
 import dev.minecraft.warzoneduels.domain.TeleportAllowanceReason;
 import dev.minecraft.warzoneduels.domain.TypedTeleportAllowance;
 import dev.minecraft.warzoneduels.domain.stats.PlayerDuelStats;
@@ -52,8 +63,10 @@ import org.bukkit.scheduler.BukkitTask;
 
 import java.net.InetAddress;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -91,6 +104,9 @@ public final class DuelService {
     private final DuelAnalyticsService duelAnalyticsService;
     private final ArenaMapService arenaMapService;
     private final ArenaTerrainService arenaTerrainService;
+    private final DuelPartyService partyService;
+    private final DuelChallengeService challengeService;
+    private final DuelCooldownService cooldownService;
     private CombatTagPort combatTagPort;
 
     private final Map<UUID, BuilderSession> builders = new ConcurrentHashMap<>();
@@ -106,6 +122,11 @@ public final class DuelService {
     private final Map<UUID, Long> blockedItemMessageCooldowns = new ConcurrentHashMap<>();
     private final Map<UUID, Long> arenaExitMessageCooldowns = new ConcurrentHashMap<>();
     private final Map<UUID, Material> trackedExplosionSources = new ConcurrentHashMap<>();
+    private final Map<UUID, UUID> trackedExplosionOwners = new ConcurrentHashMap<>();
+    private final Map<BlockKey, UUID> trackedBlockExplosionOwners = new ConcurrentHashMap<>();
+    private final Map<UUID, UUID> lastAttributedDamagers = new ConcurrentHashMap<>();
+    private final Map<UUID, PendingDeath> pendingDeaths = new LinkedHashMap<>();
+    private final Set<UUID> restoreLoadoutAfterRespawn = ConcurrentHashMap.newKeySet();
     private final Set<UUID> victoryFireworkIds = ConcurrentHashMap.newKeySet();
     private final SpectatorManager spectatorManager;
 
@@ -123,6 +144,7 @@ public final class DuelService {
     private boolean allowWaterDrain;
     private boolean clearPlacedBlocksWhenNoBreak;
     private int startCountdownSeconds;
+    private int duelTimeLimitSeconds;
     private int victoryMomentSeconds;
     private boolean victoryFireworks;
     private String matchmakingWorld;
@@ -139,6 +161,8 @@ public final class DuelService {
     private BukkitTask requestExpiryTask;
     private BukkitTask disconnectMonitorTask;
     private BukkitTask countdownTask;
+    private BukkitTask duelTimeLimitTask;
+    private BukkitTask deathResolutionTask;
     private BukkitTask queuedStartTask;
     private BukkitTask containmentTask;
     private BukkitTask victoryTask;
@@ -158,7 +182,10 @@ public final class DuelService {
         DuelAnalyticsService duelAnalyticsService,
         ArenaMapService arenaMapService,
         ArenaTerrainService arenaTerrainService,
-        CombatTagPort combatTagPort
+        CombatTagPort combatTagPort,
+        DuelPartyService partyService,
+        DuelChallengeService challengeService,
+        DuelCooldownService cooldownService
     ) {
         this.plugin = plugin;
         this.economyPort = economyPort;
@@ -178,6 +205,9 @@ public final class DuelService {
         this.duelAnalyticsService = duelAnalyticsService;
         this.arenaMapService = arenaMapService;
         this.arenaTerrainService = arenaTerrainService;
+        this.partyService = partyService;
+        this.challengeService = challengeService;
+        this.cooldownService = java.util.Objects.requireNonNull(cooldownService, "cooldownService");
         this.combatTagPort = combatTagPort;
     }
 
@@ -188,18 +218,24 @@ public final class DuelService {
     public void enable() {
         loadoutArchiveStore.enable();
         reloadConfig();
+        cooldownService.enable();
         recoveryTeleportIds.clear();
         recoveryTeleportIds.addAll(runtimeStateStore.loadRecoveryTeleportIds());
+        restoreLoadoutAfterRespawn.clear();
+        restoreLoadoutAfterRespawn.addAll(runtimeStateStore.loadPendingLoadoutRestoreIds());
         recoverActiveDuelIfNeeded();
         spectatorManager.enable();
     }
 
     public void disable(boolean serverStopping) {
+        flushPendingDeathsBeforeTransition();
         spectatorManager.disable(serverStopping ? "server-shutdown" : "plugin-disable");
         cancelRequestExpiryTask();
         cancelDisconnectMonitorTask();
         cancelQueuedStartTask();
         cancelCountdownTask();
+        cancelDuelTimeLimitTask();
+        cancelDeathResolutionTask();
         cancelContainmentTask();
         cancelVictoryTask();
 
@@ -211,8 +247,7 @@ public final class DuelService {
         if (duelEnding && activeDuel != null) {
             ActiveDuel endingDuel = activeDuel;
             teleportOnlineParticipantsToExit(endingDuel);
-            clearRespawnMarkerIfLiving(endingDuel.participantOne().playerId());
-            clearRespawnMarkerIfLiving(endingDuel.participantTwo().playerId());
+            endingDuel.participants().forEach(participant -> clearRespawnMarkerIfLiving(participant.playerId()));
             activeDuel = null;
             duelEnding = false;
             runtimeStateStore.clearRuntime();
@@ -237,7 +272,7 @@ public final class DuelService {
         }
 
         if (activeDuel != null) {
-            runtimeStateStore.saveActiveDuelSync(activeDuel);
+            runtimeStateStore.saveActiveDuelSync(activeDuel, eliminatedParticipantIds);
             runtimeStateStore.markReloadResume();
         } else {
             runtimeStateStore.clearRuntime();
@@ -258,6 +293,9 @@ public final class DuelService {
         allowWaterDrain = config.getBoolean("settings.allow-water-drain", true);
         clearPlacedBlocksWhenNoBreak = config.getBoolean("settings.clear-placed-blocks-when-no-break", true);
         startCountdownSeconds = Math.max(0, config.getInt("settings.start-countdown-seconds", 5));
+        duelTimeLimitSeconds = Math.max(0, config.getInt("settings.duel-time-limit-seconds", 0));
+        cooldownService.configure(config.getLong("settings.duel-cooldown-seconds", 300),
+            config.getLong("settings.repeat-opponent-cooldown-seconds", 86400));
         victoryMomentSeconds = Math.max(0, config.getInt("settings.victory-moment-seconds", 6));
         victoryFireworks = config.getBoolean("settings.victory-fireworks", true);
         matchmakingWorld = config.getString("matchmaking-spawn.world", config.getString("arena.world", "world"));
@@ -404,7 +442,8 @@ public final class DuelService {
             sendMessage(sender, "messages.no-arena");
             return true;
         }
-        if (activeDuel != null || pendingRequest != null || queuedDuelStart != null) {
+        if (activeDuel != null || pendingRequest != null || challengeService.activeChallengeCount() > 0
+            || queuedDuelStart != null) {
             sendMessage(sender, "messages.duel-already-running");
             return true;
         }
@@ -453,7 +492,8 @@ public final class DuelService {
             sendMessage(requester, "messages.no-builder");
             return;
         }
-        if (pendingRequest != null || activeDuel != null || queuedDuelStart != null) {
+        if (pendingRequest != null || challengeService.activeChallengeCount() > 0
+            || activeDuel != null || queuedDuelStart != null) {
             sendMessage(requester, "messages.duel-already-running");
             return;
         }
@@ -470,6 +510,12 @@ public final class DuelService {
         if (settings.getWager() > maxWager) {
             settings.setWager(maxWager);
         }
+        Optional<DuelParty> requesterParty = partyService.partyOf(requester.getUniqueId());
+        Optional<DuelParty> targetParty = partyService.partyOf(target.getUniqueId());
+        if (requesterParty.isPresent() || targetParty.isPresent()) {
+            sendPartyRequest(requester, target, settings, requesterParty, targetParty);
+            return;
+        }
         if (rejectRequestWager(requester, target, settings)) {
             return;
         }
@@ -481,13 +527,114 @@ public final class DuelService {
             settings,
             System.currentTimeMillis()
         );
+        if (cooldownService.creditChallenge(List.of(requester.getUniqueId()), List.of(target.getUniqueId()))) {
+            statsService.recordChallengeSent(requester.getUniqueId(), requester.getName());
+        }
         builders.remove(requester.getUniqueId());
         sendMessage(requester, "messages.request-sent", PLAYER_PLACEHOLDER, target.getName());
         sendRequestDetails(target, pendingRequest);
         scheduleRequestExpiry();
     }
 
+    private void sendPartyRequest(
+        Player requester,
+        Player target,
+        DuelSettings settings,
+        Optional<DuelParty> requesterParty,
+        Optional<DuelParty> targetParty
+    ) {
+        if (requesterParty.isEmpty() || targetParty.isEmpty()) {
+            sendMessageRaw(requester, prefix + ChatColor.RED + "Both players must lead a Duel Party for a party challenge.");
+            return;
+        }
+        if (!requesterParty.get().leaderId().equals(requester.getUniqueId())
+            || !targetParty.get().leaderId().equals(target.getUniqueId())) {
+            sendMessageRaw(requester, prefix + ChatColor.RED + "Only both Duel Party leaders can create this challenge.");
+            return;
+        }
+        if (!isDuelModeEnabled(requesterParty.get().size())) {
+            sendMessageRaw(requester, ChatColor.RED + disabledModeMessage(requesterParty.get().size()));
+            return;
+        }
+        if (settings.getWager() > NO_WAGER) {
+            sendMessageRaw(requester, prefix + ChatColor.RED + "Party duel wagers are not supported yet.");
+            return;
+        }
+        DuelChallenge challenge;
+        try {
+            challenge = challengeService.createPartyChallenge(
+                requester.getUniqueId(), target.getUniqueId(), settings, System.currentTimeMillis()
+            );
+        } catch (IllegalArgumentException | IllegalStateException ex) {
+            sendMessageRaw(requester, prefix + ChatColor.RED + ex.getMessage());
+            return;
+        }
+        List<Player> participants = onlinePartyParticipants(challenge);
+        if (participants == null) {
+            sendMessage(requester, MSG_TARGET_OFFLINE);
+            challengeService.cancel(requester.getUniqueId(), System.currentTimeMillis());
+            return;
+        }
+        if (rejectPartyRoster(challenge, requester)) {
+            challengeService.cancel(requester.getUniqueId(), System.currentTimeMillis());
+            return;
+        }
+        if (cooldownService.creditChallenge(rosterIds(challenge.challengerTeam()), rosterIds(challenge.opponentTeam()))) {
+            statsService.recordChallengeSent(requester.getUniqueId(), requester.getName());
+        }
+        builders.remove(requester.getUniqueId());
+        String contract = prefix + ChatColor.GOLD + teamLabel(challenge.challengerTeam()) + ChatColor.YELLOW + " vs "
+            + ChatColor.GOLD + teamLabel(challenge.opponentTeam()) + ChatColor.YELLOW + ": use /duel accept to review and confirm.";
+        sendRaw(participants, contract);
+        schedulePartyChallengeExpiry(challenge);
+    }
+
+    private List<Player> onlinePartyParticipants(DuelChallenge challenge) {
+        List<Player> participants = java.util.stream.Stream.concat(
+                challenge.challengerTeam().participants().stream(),
+                challenge.opponentTeam().participants().stream()
+            )
+            .map(participant -> Bukkit.getPlayer(participant.playerId()))
+            .toList();
+        return participants.stream().anyMatch(player -> player == null || !player.isOnline()) ? null : participants;
+    }
+
+    private boolean rejectPartyRoster(DuelChallenge challenge, Player requester) {
+        if (rejectCooldown(challenge.challengerTeam(), challenge.opponentTeam(), List.of(requester))) {
+            return true;
+        }
+        List<Player> participants = onlinePartyParticipants(challenge);
+        if (participants == null) {
+            sendMessage(requester, MSG_TARGET_OFFLINE);
+            return true;
+        }
+        int firstTeamSize = challenge.challengerTeam().participants().size();
+        if (hasOpposingSameIp(participants.subList(0, firstTeamSize),
+            participants.subList(firstTeamSize, participants.size()))) {
+            sendMessage(requester, "messages.same-ip-blocked");
+            return true;
+        }
+        for (Player participant : participants) {
+            if (isCombatTagged(participant)) {
+                sendMessageRaw(requester, prefix + ChatColor.RED + participant.getName() + " is currently in combat.");
+                return true;
+            }
+            if (!isInsideMatchmakingSpawn(participant.getLocation())) {
+                sendMessageRaw(requester, prefix + ChatColor.RED + participant.getName() + " must be inside the matchmaking spawn.");
+                return true;
+            }
+            if (isParticipantRestricted(participant.getUniqueId())) {
+                sendMessageRaw(requester, prefix + ChatColor.RED + participant.getName() + " is already busy.");
+                return true;
+            }
+        }
+        return false;
+    }
+
     private boolean rejectRequestPlayers(Player requester, Player target) {
+        if (rejectCooldown(requester, target)) {
+            return true;
+        }
         if (isCombatTagged(requester)) {
             sendMessage(requester, MSG_PLAYER_IN_COMBAT);
             return true;
@@ -535,6 +682,10 @@ public final class DuelService {
         if (!requirePermission(target, PermissionPolicy.ACCEPT)) {
             return;
         }
+        if (challengeService.challengeForParticipant(target.getUniqueId(), System.currentTimeMillis()).isPresent()) {
+            openPendingRequestReview(target);
+            return;
+        }
         if (pendingRequest == null || !pendingRequest.targetId().equals(target.getUniqueId())) {
             sendMessage(target, MSG_NO_PENDING_REQUEST);
             return;
@@ -545,6 +696,13 @@ public final class DuelService {
     public void confirmAcceptRequest(Player target) {
         requirePrimaryThread();
         if (!requirePermission(target, PermissionPolicy.ACCEPT)) {
+            return;
+        }
+        Optional<DuelChallenge> partyChallenge = challengeService.challengeForParticipant(
+            target.getUniqueId(), System.currentTimeMillis()
+        );
+        if (partyChallenge.isPresent()) {
+            confirmPartyChallenge(target, partyChallenge.get());
             return;
         }
         Player requester = acceptRequester(target);
@@ -563,6 +721,47 @@ public final class DuelService {
         startDuel(requester, target, settings);
     }
 
+    private void confirmPartyChallenge(Player participant, DuelChallenge challenge) {
+        int teamSize = challenge.challengerTeam().size();
+        if (!isDuelModeEnabled(teamSize)) {
+            challengeService.challengeForParticipant(participant.getUniqueId(), System.currentTimeMillis())
+                .ifPresent(current -> challengeService.complete(current.id()));
+            cancelRequestExpiryTask();
+            sendMessageRaw(participant, ChatColor.RED + disabledModeMessage(teamSize)
+                + " The challenge was cancelled and both rosters unlocked.");
+            return;
+        }
+        if (rejectCooldown(challenge.challengerTeam(), challenge.opponentTeam(), List.of(participant))) {
+            challengeService.cancel(participant.getUniqueId(), System.currentTimeMillis());
+            cancelRequestExpiryTask();
+            return;
+        }
+        DuelChallengeStatus status;
+        try {
+            status = challengeService.accept(participant.getUniqueId(), System.currentTimeMillis());
+        } catch (IllegalArgumentException | IllegalStateException ex) {
+            sendMessageRaw(participant, prefix + ChatColor.RED + ex.getMessage());
+            return;
+        }
+        List<Player> participants = onlinePartyParticipants(challenge);
+        if (participants != null) {
+            sendRaw(participants, prefix + ChatColor.GREEN + participant.getName() + " accepted the party duel ("
+                + challenge.acceptedCount() + "/" + challenge.requiredAcceptanceCount() + ").");
+        }
+        if (status != DuelChallengeStatus.READY) {
+            return;
+        }
+        if (rejectPartyRoster(challenge, participant) || !startPartyDuel(challenge)) {
+            challengeService.cancel(participant.getUniqueId(), System.currentTimeMillis());
+            if (participants != null) {
+                sendRaw(participants, prefix + ChatColor.RED + "The party duel could not start; the roster lock was released.");
+            }
+            return;
+        }
+        challengeService.complete(challenge.id());
+        cancelRequestExpiryTask();
+    }
+
     private Player acceptRequester(Player target) {
         if (pendingRequest == null || !pendingRequest.targetId().equals(target.getUniqueId())) {
             sendMessage(target, MSG_NO_PENDING_REQUEST);
@@ -578,6 +777,10 @@ public final class DuelService {
     }
 
     private boolean rejectAcceptedRequest(Player requester, Player target, DuelSettings settings) {
+        if (rejectCooldown(requester, target, List.of(requester, target))) {
+            clearPendingRequest();
+            return true;
+        }
         return rejectAcceptedCombatState(requester, target)
             || rejectAcceptedLocation(requester, target)
             || rejectAcceptedWager(requester, target, settings);
@@ -632,6 +835,16 @@ public final class DuelService {
 
     public void openPendingRequestReview(Player target) {
         requirePrimaryThread();
+        Optional<DuelChallenge> partyChallenge = challengeService.challengeForParticipant(
+            target.getUniqueId(), System.currentTimeMillis()
+        );
+        if (partyChallenge.isPresent()) {
+            DuelChallenge challenge = partyChallenge.get();
+            target.openInventory(DuelGui.buildRequestPreviewGui(
+                teamLabel(challenge.challengerTeam()), challenge.settings()
+            ));
+            return;
+        }
         if (pendingRequest == null || !pendingRequest.targetId().equals(target.getUniqueId())) {
             sendMessage(target, MSG_NO_PENDING_REQUEST);
             return;
@@ -642,6 +855,19 @@ public final class DuelService {
     public void denyRequest(Player target) {
         requirePrimaryThread();
         if (!requirePermission(target, PermissionPolicy.DENY)) {
+            return;
+        }
+        Optional<DuelChallenge> partyChallenge = challengeService.challengeForParticipant(
+            target.getUniqueId(), System.currentTimeMillis()
+        );
+        if (partyChallenge.isPresent()) {
+            DuelChallenge challenge = partyChallenge.get();
+            List<Player> participants = onlinePartyParticipants(challenge);
+            challengeService.decline(target.getUniqueId(), System.currentTimeMillis());
+            cancelRequestExpiryTask();
+            if (participants != null) {
+                sendRaw(participants, prefix + ChatColor.YELLOW + target.getName() + " declined the party duel.");
+            }
             return;
         }
         if (pendingRequest == null || !pendingRequest.targetId().equals(target.getUniqueId())) {
@@ -683,11 +909,11 @@ public final class DuelService {
         }
         participant.setDrawRequested(true);
         sendToParticipants("messages.draw-requested", PLAYER_PLACEHOLDER, player.getName());
-        if (activeDuel.participantOne().drawRequested() && activeDuel.participantTwo().drawRequested()) {
-            concludeDuel(null, DuelEndReason.DRAW, true);
+        if (TeamMatchPolicy.allSurvivorsRequestedDraw(activeDuel, eliminatedParticipantIds)) {
+            concludeDuel((Player) null, DuelEndReason.DRAW, true);
             return;
         }
-        runtimeStateStore.queueActiveDuelSave(activeDuel);
+        runtimeStateStore.queueActiveDuelSave(activeDuel, eliminatedParticipantIds);
     }
 
     public void showSettings(Player player) {
@@ -748,6 +974,9 @@ public final class DuelService {
         reloadConfig();
         if (plugin.spoilsService() != null) {
             plugin.spoilsService().reloadConfig();
+        }
+        if (!cooldownService.recover()) {
+            sendMessageRaw(sender, prefix + ChatColor.RED + "Cooldown storage remains unavailable; new duels remain blocked.");
         }
         sendMessageRaw(sender, prefix + ChatColor.GREEN + "Config reloaded.");
     }
@@ -833,6 +1062,18 @@ public final class DuelService {
             spectatorManager.restore(player, "player-quit", false);
         }
         builders.remove(player.getUniqueId());
+        Optional<DuelChallenge> partyChallenge = challengeService.challengeForParticipant(
+            player.getUniqueId(), System.currentTimeMillis()
+        );
+        if (partyChallenge.isPresent()) {
+            DuelChallenge challenge = partyChallenge.get();
+            List<Player> participants = onlinePartyParticipants(challenge);
+            challengeService.cancel(player.getUniqueId(), System.currentTimeMillis());
+            cancelRequestExpiryTask();
+            if (participants != null) {
+                sendRaw(participants, prefix + ChatColor.YELLOW + "The party duel was canceled because a participant left.");
+            }
+        }
         if (queuedDuelStart != null && queuedDuelStart.involves(player.getUniqueId())) {
             Player requester = Bukkit.getPlayer(queuedDuelStart.requesterId());
             Player target = Bukkit.getPlayer(queuedDuelStart.targetId());
@@ -844,6 +1085,17 @@ public final class DuelService {
             }
             clearQueuedDuelStart();
         }
+        partyService.partyOf(player.getUniqueId()).ifPresent(party -> {
+            if (party.leaderId().equals(player.getUniqueId()) && !party.isRosterLocked()) {
+                partyService.leaveParty(player.getUniqueId());
+                for (DuelParty.DuelPartyMember member : party.members()) {
+                    Player online = Bukkit.getPlayer(member.playerId());
+                    if (online != null) {
+                        sendMessageRaw(online, ChatColor.YELLOW + "The Duel Party was disbanded because its leader disconnected.");
+                    }
+                }
+            }
+        });
         if (pendingRequest != null) {
             if (pendingRequest.requesterId().equals(player.getUniqueId()) || pendingRequest.targetId().equals(player.getUniqueId())) {
                 clearPendingRequest();
@@ -860,7 +1112,7 @@ public final class DuelService {
         participant.setDisconnectDeadlineEpochMs(System.currentTimeMillis() + (disconnectGraceSeconds * 1000L));
         sendToParticipants("messages.disconnect-grace", PLAYER_PLACEHOLDER, participant.name(), "{seconds}", String.valueOf(disconnectGraceSeconds));
         startDisconnectMonitor();
-        runtimeStateStore.queueActiveDuelSave(activeDuel);
+        runtimeStateStore.queueActiveDuelSave(activeDuel, eliminatedParticipantIds);
     }
 
     public void handleJoin(Player player) {
@@ -882,6 +1134,9 @@ public final class DuelService {
             recoveryTeleportIds.remove(player.getUniqueId());
             runtimeStateStore.clearRecoveryTeleportId(player.getUniqueId());
         }
+        if (restoreLoadoutAfterRespawn.contains(player.getUniqueId()) && !player.isDead()) {
+            Bukkit.getScheduler().runTask(plugin, () -> restoreArchivedLoadout(player));
+        }
         if (shouldBlockArenaFootprintEntry(player, player.getLocation())) {
             handleUnauthorizedArenaEntry(player);
         }
@@ -891,6 +1146,10 @@ public final class DuelService {
         }
         MatchParticipant participant = activeDuel.participant(player.getUniqueId());
         if (participant == null) {
+            return;
+        }
+        if (eliminatedParticipantIds.contains(player.getUniqueId())) {
+            teleportToExit(player);
             return;
         }
         if (duelEnding) {
@@ -909,7 +1168,7 @@ public final class DuelService {
         } else {
             startDisconnectMonitor();
         }
-        runtimeStateStore.queueActiveDuelSave(activeDuel);
+        runtimeStateStore.queueActiveDuelSave(activeDuel, eliminatedParticipantIds);
     }
 
     public void handleRespawn(PlayerRespawnEvent event) {
@@ -929,9 +1188,12 @@ public final class DuelService {
                 event.setRespawnLocation(location);
             }
         }
+        if (restoreLoadoutAfterRespawn.contains(playerId)) {
+            Bukkit.getScheduler().runTask(plugin, () -> restoreArchivedLoadout(event.getPlayer()));
+        }
     }
 
-    public void handleDeath(Player player, List<ItemStack> drops) {
+    public void handleDeath(Player player, Player killer, List<ItemStack> drops) {
         requirePrimaryThread();
         if (activeDuel == null || duelEnding) {
             return;
@@ -940,15 +1202,117 @@ public final class DuelService {
         if (dead == null) {
             return;
         }
-        MatchParticipant winner = activeDuel.other(dead.playerId());
-        Player winnerPlayer = winner == null ? null : Bukkit.getPlayer(winner.playerId());
-        if (winner != null) {
-            spoilsService.createSpoils(winner.playerId(), winner.name(), dead.playerId(), dead.name(), drops);
+        if (!eliminatedParticipantIds.add(dead.playerId())) {
+            return;
         }
+        UUID killerId = attributedKillerId(dead.playerId(), killer);
+        pendingDeaths.put(dead.playerId(), new PendingDeath(dead, killerId, List.copyOf(drops)));
         respawnToSpawn.add(dead.playerId());
-        eliminatedParticipantIds.add(dead.playerId());
         activeParticipantIndex.remove(dead.playerId());
-        concludeDuel(winnerPlayer, DuelEndReason.KILL, true);
+        runtimeStateStore.queueActiveDuelSave(activeDuel, eliminatedParticipantIds);
+        if (deathResolutionTask == null) {
+            deathResolutionTask = Bukkit.getScheduler().runTask(plugin, this::resolvePendingDeaths);
+        }
+    }
+
+    private UUID attributedKillerId(UUID defeatedPlayerId, Player bukkitKiller) {
+        UUID bukkitKillerId = bukkitKiller == null ? null : bukkitKiller.getUniqueId();
+        MatchTeam opposingTeam = activeDuel == null ? null : activeDuel.opposingTeam(defeatedPlayerId);
+        if (opposingTeam != null && opposingTeam.contains(bukkitKillerId)) {
+            return bukkitKillerId;
+        }
+        UUID attributedId = lastAttributedDamagers.remove(defeatedPlayerId);
+        return opposingTeam != null && opposingTeam.contains(attributedId) ? attributedId : null;
+    }
+
+    private void flushPendingDeathsBeforeTransition() {
+        if (!pendingDeaths.isEmpty() && activeDuel != null && !duelEnding) {
+            cancelDeathResolutionTask();
+            resolvePendingDeaths();
+        }
+    }
+
+    private void resolvePendingDeaths() {
+        requirePrimaryThread();
+        deathResolutionTask = null;
+        if (activeDuel == null || duelEnding || pendingDeaths.isEmpty()) {
+            pendingDeaths.clear();
+            return;
+        }
+        TeamEliminationOutcome outcome = TeamMatchPolicy.eliminationOutcome(activeDuel, eliminatedParticipantIds);
+        if (outcome == TeamEliminationOutcome.DRAW) {
+            pendingDeaths.keySet().forEach(restoreLoadoutAfterRespawn::add);
+            runtimeStateStore.savePendingLoadoutRestoreIds(restoreLoadoutAfterRespawn);
+            for (UUID playerId : pendingDeaths.keySet()) {
+                Player player = Bukkit.getPlayer(playerId);
+                if (player != null && player.isOnline() && !player.isDead()) {
+                    restoreArchivedLoadout(player);
+                }
+            }
+            pendingDeaths.clear();
+            concludeDuel((Player) null, DuelEndReason.DRAW, true);
+            return;
+        }
+        for (PendingDeath pendingDeath : pendingDeaths.values()) {
+            createSpoils(pendingDeath);
+        }
+        List<MatchParticipant> resolvedDeaths = pendingDeaths.values().stream().map(PendingDeath::participant).toList();
+        pendingDeaths.clear();
+        if (outcome == TeamEliminationOutcome.CONTINUE) {
+            for (MatchParticipant participant : resolvedDeaths) {
+                sendToParticipants("messages.player-eliminated", PLAYER_PLACEHOLDER, participant.name());
+            }
+            return;
+        }
+        MatchTeam winningTeam = outcome == TeamEliminationOutcome.TEAM_ONE_WINS
+            ? activeDuel.teamOne()
+            : activeDuel.teamTwo();
+        concludeDuel(winningTeam, DuelEndReason.KILL, true);
+    }
+
+    private void createSpoils(PendingDeath pendingDeath) {
+        MatchParticipant dead = pendingDeath.participant();
+        MatchParticipant spoilsRecipient = selectSpoilsRecipient(dead.playerId(), pendingDeath.killerId());
+        if (spoilsRecipient != null) {
+            spoilsService.createSpoils(
+                spoilsRecipient.playerId(), spoilsRecipient.name(), dead.playerId(), dead.name(), pendingDeath.drops()
+            );
+        }
+    }
+
+    private MatchParticipant selectSpoilsRecipient(UUID defeatedPlayerId, UUID killerId) {
+        return TeamSpoilsPolicy.recipient(
+            activeDuel,
+            defeatedPlayerId,
+            killerId,
+            eliminatedParticipantIds
+        );
+    }
+
+    private void restoreArchivedLoadout(Player player) {
+        LoadoutSnapshot snapshot = loadoutArchiveStore.loadLatestPreDuel(player.getUniqueId());
+        if (snapshot != null && player.isOnline()) {
+            loadoutArchiveStore.apply(player, snapshot);
+            restoreLoadoutAfterRespawn.remove(player.getUniqueId());
+            runtimeStateStore.clearPendingLoadoutRestoreId(player.getUniqueId());
+        }
+    }
+
+    private Player winnerRepresentative(MatchTeam winningTeam) {
+        return TeamMatchPolicy.survivingParticipants(winningTeam, eliminatedParticipantIds).stream()
+            .map(participant -> Bukkit.getPlayer(participant.playerId()))
+            .filter(java.util.Objects::nonNull)
+            .filter(Player::isOnline)
+            .findFirst()
+            .orElse(null);
+    }
+
+    private void concludeDuel(MatchTeam winningTeam, DuelEndReason reason, boolean broadcastOutcome) {
+        MatchParticipant representative = TeamMatchPolicy.survivingParticipants(winningTeam, eliminatedParticipantIds).stream()
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException("A winning team requires a surviving participant."));
+        Player onlineRepresentative = winnerRepresentative(winningTeam);
+        concludeDuel(representative.playerId(), representative.name(), onlineRepresentative, reason, broadcastOutcome);
     }
 
     public void handleAsyncChat(Player player) {
@@ -1338,9 +1702,12 @@ public final class DuelService {
         }
     }
 
-    public void trackExplosionSource(UUID entityId, Material sourceMaterial) {
+    public void trackExplosionSource(UUID entityId, Material sourceMaterial, UUID ownerId) {
         if (entityId != null && sourceMaterial != null) {
             trackedExplosionSources.put(entityId, sourceMaterial);
+        }
+        if (entityId != null && ownerId != null && isInActiveDuel(ownerId)) {
+            trackedExplosionOwners.put(entityId, ownerId);
         }
     }
 
@@ -1354,6 +1721,49 @@ public final class DuelService {
     public void clearExplosionSource(UUID entityId) {
         if (entityId != null) {
             trackedExplosionSources.remove(entityId);
+            trackedExplosionOwners.remove(entityId);
+        }
+    }
+
+    public void clearExplosionSourceNextTick(UUID entityId) {
+        if (entityId != null) {
+            Bukkit.getScheduler().runTask(plugin, () -> clearExplosionSource(entityId));
+        }
+    }
+
+    public UUID explosionOwner(UUID entityId) {
+        return entityId == null ? null : trackedExplosionOwners.get(entityId);
+    }
+
+    public void trackBlockExplosionSource(Block block, UUID ownerId) {
+        if (block != null && ownerId != null && isInActiveDuel(ownerId)) {
+            trackedBlockExplosionOwners.put(BlockKey.fromLocation(block.getLocation()), ownerId);
+        }
+    }
+
+    public UUID blockExplosionOwner(Location location) {
+        return location == null ? null : trackedBlockExplosionOwners.get(BlockKey.fromLocation(location));
+    }
+
+    public void clearBlockExplosionSourceNextTick(Location location) {
+        if (location == null) {
+            return;
+        }
+        BlockKey key = BlockKey.fromLocation(location);
+        Bukkit.getScheduler().runTask(plugin, () -> trackedBlockExplosionOwners.remove(key));
+    }
+
+    public boolean shouldCancelExplosiveDamage(Player victim, UUID attributedAttackerId) {
+        return ExplosiveCombatPolicy.shouldCancelDamage(activeDuel, victim.getUniqueId(), attributedAttackerId);
+    }
+
+    public void recordAttributedDamage(Player victim, UUID attributedAttackerId) {
+        if (activeDuel == null || victim == null || attributedAttackerId == null) {
+            return;
+        }
+        MatchTeam opposingTeam = activeDuel.opposingTeam(victim.getUniqueId());
+        if (opposingTeam != null && opposingTeam.contains(attributedAttackerId)) {
+            lastAttributedDamagers.put(victim.getUniqueId(), attributedAttackerId);
         }
     }
 
@@ -1375,7 +1785,8 @@ public final class DuelService {
         if (attacker == null) {
             return false;
         }
-        return !isInActiveDuel(attacker.getUniqueId());
+        return !isInActiveDuel(attacker.getUniqueId())
+            || TeamMatchPolicy.isFriendlyFire(activeDuel, attacker.getUniqueId(), victim.getUniqueId());
     }
 
     public boolean isDuelCountdownActive() {
@@ -1459,13 +1870,24 @@ public final class DuelService {
         if (activeDuel == null || arena == null) {
             return null;
         }
-        if (activeDuel.participantOne().playerId().equals(playerId)) {
-            return arena.spawn1();
+        int firstTeamIndex = participantIndex(activeDuel.teamOne(), playerId);
+        if (firstTeamIndex >= 0) {
+            return arena.teamSpawn(0, firstTeamIndex);
         }
-        if (activeDuel.participantTwo().playerId().equals(playerId)) {
-            return arena.spawn2();
+        int secondTeamIndex = participantIndex(activeDuel.teamTwo(), playerId);
+        if (secondTeamIndex >= 0) {
+            return arena.teamSpawn(1, secondTeamIndex);
         }
         return null;
+    }
+
+    private int participantIndex(MatchTeam team, UUID playerId) {
+        for (int index = 0; index < team.participants().size(); index++) {
+            if (team.participants().get(index).playerId().equals(playerId)) {
+                return index;
+            }
+        }
+        return -1;
     }
 
     public void updateArenaLocation(Player actor, String key, Location location) {
@@ -1523,10 +1945,9 @@ public final class DuelService {
         }
         if (!persistedRuntime.resumeAllowed()) {
             refundPersistedWagerIfHeld(persistedRuntime.activeDuel());
-            Set<UUID> playerIds = Set.of(
-                persistedRuntime.activeDuel().participantOne().playerId(),
-                persistedRuntime.activeDuel().participantTwo().playerId()
-            );
+            Set<UUID> playerIds = persistedRuntime.activeDuel().participants().stream()
+                .map(MatchParticipant::playerId)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
             recoveryTeleportIds.addAll(playerIds);
             runtimeStateStore.saveRecoveryTeleportIds(recoveryTeleportIds);
             runtimeStateStore.clearRuntime();
@@ -1534,9 +1955,15 @@ public final class DuelService {
             return;
         }
         activeDuel = persistedRuntime.activeDuel();
+        eliminatedParticipantIds.clear();
+        eliminatedParticipantIds.addAll(persistedRuntime.eliminatedParticipantIds());
         arenaMapService.prepareArenaForMatch(arena, activeDuel.settings());
         rebuildParticipantIndex();
-        for (UUID playerId : List.of(activeDuel.participantOne().playerId(), activeDuel.participantTwo().playerId())) {
+        for (MatchParticipant participant : activeDuel.participants()) {
+            UUID playerId = participant.playerId();
+            if (eliminatedParticipantIds.contains(playerId)) {
+                continue;
+            }
             Player player = Bukkit.getPlayer(playerId);
             if (player != null && player.isOnline()) {
                 clearExternalCombatState(player);
@@ -1546,6 +1973,7 @@ public final class DuelService {
         }
         startDisconnectMonitor();
         startContainmentMonitor();
+        startDuelTimeLimit();
     }
 
     private void handleServerStoppingDisable() {
@@ -1554,7 +1982,9 @@ public final class DuelService {
             return;
         }
         ActiveDuel finishedDuel = activeDuel;
-        Set<UUID> participantIds = Set.of(activeDuel.participantOne().playerId(), activeDuel.participantTwo().playerId());
+        Set<UUID> participantIds = finishedDuel.participants().stream()
+            .map(MatchParticipant::playerId)
+            .collect(java.util.stream.Collectors.toUnmodifiableSet());
         recoveryTeleportIds.addAll(participantIds);
         runtimeStateStore.saveRecoveryTeleportIds(recoveryTeleportIds);
         refundWagerIfHeld();
@@ -1575,37 +2005,113 @@ public final class DuelService {
             queueDuelStart(requester, target, settings);
             return;
         }
+        MatchTeam firstTeam = MatchTeam.singleton(new MatchParticipant(requester.getUniqueId(), requester.getName()));
+        MatchTeam secondTeam = MatchTeam.singleton(new MatchParticipant(target.getUniqueId(), target.getName()));
+        startDuel(firstTeam, secondTeam, List.of(requester, target), settings);
+    }
+
+    public boolean isDuelModeEnabled(int teamSize) {
+        return switch (teamSize) {
+            case 1 -> true;
+            case 2, 3 -> plugin.getConfig().getBoolean(modeConfigPath(teamSize), true);
+            default -> false;
+        };
+    }
+
+    public void setDuelModeEnabled(int teamSize, boolean enabled) throws java.io.IOException {
+        String path = modeConfigPath(teamSize);
+        FileConfiguration config = plugin.getConfig();
+        Object previous = config.get(path);
+        config.set(path, enabled);
+        try {
+            config.save(new java.io.File(plugin.getDataFolder(), "config.yml"));
+        } catch (java.io.IOException ex) {
+            config.set(path, previous);
+            throw ex;
+        }
+    }
+
+    private String modeConfigPath(int teamSize) {
+        if (teamSize != 2 && teamSize != 3) {
+            throw new IllegalArgumentException("Only 2v2 and 3v3 can be toggled.");
+        }
+        return "settings.duel-modes." + teamSize + "v" + teamSize + "-enabled";
+    }
+
+    private String disabledModeMessage(int teamSize) {
+        return teamSize + "v" + teamSize + " duels are disabled by an administrator.";
+    }
+
+    public boolean startPartyDuel(DuelChallenge challenge) {
+        requirePrimaryThread();
+        if (challenge == null || challenge.status(System.currentTimeMillis()) != DuelChallengeStatus.READY
+            || !isDuelModeEnabled(challenge.challengerTeam().size())
+            || activeDuel != null || preparingDuel != null || queuedDuelStart != null || arenaTerrainService.isBusy()) {
+            return false;
+        }
+        List<Player> participants = java.util.stream.Stream.concat(
+                challenge.challengerTeam().participants().stream(),
+                challenge.opponentTeam().participants().stream()
+            )
+            .map(participant -> Bukkit.getPlayer(participant.playerId()))
+            .toList();
+        if (participants.stream().anyMatch(player -> player == null || !player.isOnline())) {
+            return false;
+        }
+        return startDuel(challenge.challengerTeam(), challenge.opponentTeam(), participants, challenge.settings());
+    }
+
+    private boolean startDuel(MatchTeam firstTeam, MatchTeam secondTeam, List<Player> participants, DuelSettings settings) {
+        if (!isDuelModeEnabled(firstTeam.size())) {
+            sendRaw(participants, prefix + ChatColor.RED + disabledModeMessage(firstTeam.size()));
+            return false;
+        }
+        if (rejectCooldown(firstTeam, secondTeam, participants)) {
+            return false;
+        }
+        if (!cooldownService.ensureWritable()) {
+            rejectCooldown(firstTeam, secondTeam, participants);
+            return false;
+        }
         if (!arenaTerrainService.isReady()) {
-            sendMessageRaw(requester, prefix + ChatColor.RED + "Arena terrain footprint is not loaded.");
-            sendMessageRaw(target, prefix + ChatColor.RED + "Arena terrain footprint is not loaded.");
-            return;
+            sendRaw(participants, prefix + ChatColor.RED + "Arena terrain footprint is not loaded.");
+            return false;
         }
         DuelSettings preparedSettings = settings.copy();
         arenaMapService.sanitizeSettings(preparedSettings);
         DuelMapOption selectedMap = arenaMapService.resolve(preparedSettings.getMapId());
         if (!arenaTerrainService.hasSnapshot(selectedMap.id())) {
-            sendMessageRaw(requester, prefix + ChatColor.RED + "The selected arena map is not saved yet: " + selectedMap.displayName() + ".");
-            sendMessageRaw(target, prefix + ChatColor.RED + "The selected arena map is not saved yet: " + selectedMap.displayName() + ".");
-            return;
+            sendRaw(participants, prefix + ChatColor.RED + "The selected arena map is not saved yet: " + selectedMap.displayName() + ".");
+            return false;
         }
 
-        MatchParticipant one = new MatchParticipant(requester.getUniqueId(), requester.getName());
-        MatchParticipant two = new MatchParticipant(target.getUniqueId(), target.getName());
-        ActiveDuel stagedDuel = new ActiveDuel(one, two, preparedSettings, System.currentTimeMillis());
-        loadoutArchiveStore.saveLatestPreDuel(requester, loadoutArchiveStore.capture(requester));
-        loadoutArchiveStore.saveLatestPreDuel(target, loadoutArchiveStore.capture(target));
+        DuelMatchType matchType = firstTeam.size() == 1 ? DuelMatchType.NORMAL : DuelMatchType.PARTY;
+        ActiveDuel stagedDuel = new ActiveDuel(matchType, firstTeam, secondTeam, preparedSettings, System.currentTimeMillis());
+        try {
+            TeamOutcomePolicy.validateWager(stagedDuel);
+        } catch (IllegalArgumentException ex) {
+            sendRaw(participants, prefix + ChatColor.RED + ex.getMessage());
+            return false;
+        }
+        for (Player participant : participants) {
+            loadoutArchiveStore.saveLatestPreDuel(participant, loadoutArchiveStore.capture(participant));
+        }
 
-        if (preparedSettings.getWager() > NO_WAGER && !holdWager(stagedDuel, requester, target, preparedSettings.getWager())) {
-            sendMessage(requester, MSG_CANNOT_AFFORD, PLAYER_PLACEHOLDER, target.getName());
-            sendMessage(target, MSG_CANNOT_AFFORD, PLAYER_PLACEHOLDER, requester.getName());
-            return;
+        if (preparedSettings.getWager() > NO_WAGER
+            && !holdWager(stagedDuel, participants.get(0), participants.get(1), preparedSettings.getWager())) {
+            sendRaw(participants, prefix + ChatColor.RED + "A participant cannot afford this wager.");
+            return false;
         }
 
         preparingDuel = stagedDuel;
-        sendMessageRaw(requester, ChatColor.YELLOW + "Preparing arena terrain...");
-        sendMessageRaw(target, ChatColor.YELLOW + "Preparing arena terrain...");
+        sendRaw(participants, ChatColor.YELLOW + "Preparing arena terrain...");
         arenaTerrainService.loadSnapshot(selectedMap.id(), () -> {
             if (preparingDuel != stagedDuel) {
+                refundWagerIfHeld(stagedDuel);
+                return;
+            }
+            if (rejectCooldown(firstTeam, secondTeam, participants)) {
+                preparingDuel = null;
                 refundWagerIfHeld(stagedDuel);
                 return;
             }
@@ -1613,51 +2119,74 @@ public final class DuelService {
             activeDuel = stagedDuel;
             duelEnding = false;
             queuedDuelStart = null;
+            rebuildParticipantIndex();
+            duelCountdownActive = true;
             arenaMapService.prepareArenaForMatch(arena, activeDuel.settings());
-            clearExternalCombatState(requester);
-            clearExternalCombatState(target);
-            prepareCombatant(requester);
-            prepareCombatant(target);
-            teleportToAssignedSpawn(requester);
-            teleportToAssignedSpawn(target);
+            for (Player participant : participants) {
+                clearExternalCombatState(participant);
+                prepareCombatant(participant);
+                teleportToAssignedSpawn(participant);
+            }
             rebuildParticipantIndex();
             startContainmentMonitor();
-            sendMessage(requester, "messages.duel-risk-warning");
-            sendMessage(target, "messages.duel-risk-warning");
-            sendMessageRaw(requester, ChatColor.RED + "Disconnecting gives you " + disconnectGraceSeconds + " seconds to rejoin before you lose.");
-            sendMessageRaw(target, ChatColor.RED + "Disconnecting gives you " + disconnectGraceSeconds + " seconds to rejoin before you lose.");
+            for (Player participant : participants) {
+                sendMessage(participant, "messages.duel-risk-warning");
+                sendMessageRaw(participant, ChatColor.RED + "Disconnecting gives you " + disconnectGraceSeconds + " seconds to rejoin before elimination.");
+            }
             String wagerText = preparedSettings.getWager() > NO_WAGER ? " for $" + formatAmount(preparedSettings.getWager()) : "";
-            broadcast("messages.duel-start", "{p1}", requester.getName(), "{p2}", target.getName(), "{wager}", wagerText);
-            broadcastWatchPrompt(requester.getUniqueId(), target.getUniqueId());
-            runtimeStateStore.queueActiveDuelSave(activeDuel, 1L);
-            startCountdown(requester, target);
+            broadcast("messages.duel-start", "{p1}", teamLabel(firstTeam), "{p2}", teamLabel(secondTeam), "{wager}", wagerText);
+            broadcastWatchPrompt(activeDuel.participants().stream().map(MatchParticipant::playerId).collect(java.util.stream.Collectors.toSet()));
+            runtimeStateStore.queueActiveDuelSave(activeDuel, eliminatedParticipantIds, 1L);
+            startCountdown(participants);
         }, message -> {
             if (preparingDuel == stagedDuel) {
                 preparingDuel = null;
             }
             refundWagerIfHeld(stagedDuel);
-            sendMessageRaw(requester, ChatColor.RED + message);
-            sendMessageRaw(target, ChatColor.RED + message);
+            sendRaw(participants, ChatColor.RED + message);
             arenaTerrainService.ensureDefaultSnapshotLoaded(logMessage -> plugin.getLogger().warning(logMessage));
         });
+        return true;
     }
 
     private void concludeDuel(Player winner, DuelEndReason reason, boolean broadcastOutcome) {
+        concludeDuel(
+            winner == null ? null : winner.getUniqueId(),
+            winner == null ? null : winner.getName(),
+            winner,
+            reason,
+            broadcastOutcome
+        );
+    }
+
+    private void concludeDuel(
+        UUID winnerId,
+        String winnerName,
+        Player onlineWinner,
+        DuelEndReason reason,
+        boolean broadcastOutcome
+    ) {
         requirePrimaryThread();
         if (activeDuel == null || duelEnding) {
             return;
         }
+        flushPendingDeathsBeforeTransition();
+        if (activeDuel == null || duelEnding) {
+            return;
+        }
         ActiveDuel finishedDuel = activeDuel;
-        UUID winnerId = winner == null ? null : winner.getUniqueId();
         duelEnding = true;
         cancelCountdownTask();
+        cancelDuelTimeLimitTask();
         cancelDisconnectMonitorTask();
 
-        if (winner != null) {
-            payoutWager(winner);
+        if (winnerId != null) {
+            if (onlineWinner != null) {
+                payoutWager(onlineWinner);
+            }
             if (broadcastOutcome) {
                 String wagerText = finishedDuel.settings().getWager() > NO_WAGER ? " for $" + formatAmount(finishedDuel.settings().getWager()) : "";
-                broadcast("messages.duel-end", "{winner}", winner.getName(), "{wager}", wagerText);
+                broadcast("messages.duel-end", "{winner}", winnerAnnouncement(finishedDuel, winnerId, winnerName), "{wager}", wagerText);
             }
         } else {
             refundWagerIfHeld();
@@ -1667,27 +2196,48 @@ public final class DuelService {
         }
 
         duelAnalyticsService.recordDuel(finishedDuel, winnerId, reason);
-        statsService.recordMatchResult(finishedDuel, winnerId, reason);
+        boolean normalResult = reason == DuelEndReason.KILL || reason == DuelEndReason.DRAW
+            || reason == DuelEndReason.DISCONNECT_TIMEOUT;
+        if (normalResult) {
+            boolean durableCooldown = cooldownService.recordCompletion(rosterIds(finishedDuel.teamOne()), rosterIds(finishedDuel.teamTwo()));
+            if (durableCooldown && reason == DuelEndReason.DRAW && TeamMatchPolicy.allSurvivorsRequestedDraw(finishedDuel, eliminatedParticipantIds)) {
+                for (MatchParticipant participant : finishedDuel.participants()) {
+                    if (!eliminatedParticipantIds.contains(participant.playerId())) {
+                        statsService.recordMutualDraw(participant.playerId(), participant.name());
+                    }
+                }
+            }
+            statsService.recordMatchResult(finishedDuel, winnerId, reason, durableCooldown);
+        }
         runtimeStateStore.clearRuntime();
 
-        if (winner != null && reason == DuelEndReason.KILL && victoryMomentSeconds > 0) {
-            healAfterDuel(winner);
-            startVictoryMoment(finishedDuel, winner);
+        if (winnerId != null && finishedDuel.matchType() == DuelMatchType.PARTY) {
+            MatchTeam winningTeam = finishedDuel.teamOf(winnerId);
+            if (winningTeam != null) {
+                for (MatchParticipant participant : TeamMatchPolicy.survivingParticipants(winningTeam, eliminatedParticipantIds)) {
+                    Player onlineParticipant = Bukkit.getPlayer(participant.playerId());
+                    if (onlineParticipant != null && onlineParticipant.isOnline() && !onlineParticipant.isDead()) {
+                        healAfterDuel(onlineParticipant);
+                    }
+                }
+            }
+        }
+
+        if (onlineWinner != null && finishedDuel.matchType() == DuelMatchType.NORMAL
+            && reason == DuelEndReason.KILL && victoryMomentSeconds > 0) {
+            healAfterDuel(onlineWinner);
+            startVictoryMoment(finishedDuel, onlineWinner);
             return;
         }
 
-        finishConcludedDuel(finishedDuel, winner);
+        finishConcludedDuel(finishedDuel, onlineWinner);
     }
 
     private void finishConcludedDuel(ActiveDuel finishedDuel, Player winner) {
-        UUID participantOne = finishedDuel.participantOne().playerId();
-        UUID participantTwo = finishedDuel.participantTwo().playerId();
-
         if (winner != null) {
             healAfterDuel(winner);
         }
-        finishParticipantExit(participantOne);
-        finishParticipantExit(participantTwo);
+        finishedDuel.participants().forEach(participant -> finishParticipantExit(participant.playerId()));
 
         activeDuel = null;
         duelEnding = false;
@@ -1696,6 +2246,41 @@ public final class DuelService {
         rebuildParticipantIndex();
         spectatorManager.restoreAllOnline("duel-ended");
         cleanupArenaAfterMatch(finishedDuel, true);
+    }
+
+    private List<UUID> rosterIds(MatchTeam team) {
+        return team.participants().stream().map(MatchParticipant::playerId).toList();
+    }
+
+    private boolean rejectCooldown(Player requester, Player target) {
+        return rejectCooldown(requester, target, List.of(requester));
+    }
+
+    private boolean rejectCooldown(Player requester, Player target, List<Player> recipients) {
+        return rejectCooldown(MatchTeam.singleton(new MatchParticipant(requester.getUniqueId(), requester.getName())),
+            MatchTeam.singleton(new MatchParticipant(target.getUniqueId(), target.getName())), recipients);
+    }
+
+    private boolean rejectCooldown(MatchTeam first, MatchTeam second, List<Player> recipients) {
+        if (cooldownService == null || !cooldownService.isHealthy()) {
+            sendRaw(recipients, prefix + color(plugin.getConfig().getString("messages.cooldown-unavailable",
+                "&cDuels are unavailable while cooldown history needs administrator attention.")));
+            return true;
+        }
+        var blocked = cooldownService.block(rosterIds(first), rosterIds(second));
+        if (blocked == null) return false;
+        Map<UUID, String> names = new java.util.HashMap<>();
+        first.participants().forEach(participant -> names.put(participant.playerId(), participant.name()));
+        second.participants().forEach(participant -> names.put(participant.playerId(), participant.name()));
+        String path = blocked.opponent() == null ? "messages.duel-cooldown" : "messages.repeat-opponent-cooldown";
+        String fallback = blocked.opponent() == null ? "&c{player} must wait {seconds}s before another duel."
+            : "&c{player} and {opponent} must wait {seconds}s before facing each other again.";
+        String message = plugin.getConfig().getString(path, fallback)
+            .replace("{player}", names.get(blocked.player()))
+            .replace("{opponent}", blocked.opponent() == null ? "" : names.get(blocked.opponent()))
+            .replace("{seconds}", Long.toString(blocked.remainingSeconds()));
+        sendRaw(recipients, prefix + color(message));
+        return true;
     }
 
     private void finishParticipantExit(UUID playerId) {
@@ -1725,8 +2310,8 @@ public final class DuelService {
         if (duel == null) {
             return;
         }
-        for (UUID playerId : List.of(duel.participantOne().playerId(), duel.participantTwo().playerId())) {
-            Player player = Bukkit.getPlayer(playerId);
+        for (MatchParticipant participant : duel.participants()) {
+            Player player = Bukkit.getPlayer(participant.playerId());
             if (player != null && player.isOnline() && !player.isDead()) {
                 teleportToExit(player);
             }
@@ -1810,6 +2395,10 @@ public final class DuelService {
         allowedArenaItemEntityIds.clear();
         allowedArenaItemSpawnLocations.clear();
         trackedExplosionSources.clear();
+        trackedExplosionOwners.clear();
+        trackedBlockExplosionOwners.clear();
+        lastAttributedDamagers.clear();
+        pendingDeaths.clear();
         blockedItemMessageCooldowns.clear();
         arenaExitMessageCooldowns.clear();
         victoryFireworkIds.clear();
@@ -1858,6 +2447,33 @@ public final class DuelService {
         }, requestExpireSeconds * 20L);
     }
 
+    private void schedulePartyChallengeExpiry(DuelChallenge challenge) {
+        cancelRequestExpiryTask();
+        long remainingMillis = Math.max(50L, challenge.expiresAtEpochMs() - System.currentTimeMillis());
+        long delayTicks = Math.max(1L, (remainingMillis + 49L) / 50L);
+        List<UUID> participantIds = java.util.stream.Stream.concat(
+                challenge.challengerTeam().participants().stream(),
+                challenge.opponentTeam().participants().stream()
+            )
+            .map(MatchParticipant::playerId)
+            .toList();
+        requestExpiryTask = Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            Optional<DuelChallenge> current = challengeService.challengeForParticipant(
+                participantIds.get(0), System.currentTimeMillis()
+            );
+            if (current.isPresent()) {
+                challengeService.cancel(participantIds.get(0), System.currentTimeMillis());
+            }
+            for (UUID participantId : participantIds) {
+                Player participant = Bukkit.getPlayer(participantId);
+                if (participant != null && participant.isOnline()) {
+                    sendMessageRaw(participant, prefix + ChatColor.YELLOW + "The party duel challenge expired.");
+                }
+            }
+            requestExpiryTask = null;
+        }, delayTicks);
+    }
+
     private void startDisconnectMonitor() {
         if (activeDuel == null) {
             return;
@@ -1881,19 +2497,25 @@ public final class DuelService {
                 }
                 return;
             }
-            MatchParticipant winner = activeDuel.other(expired.playerId());
-            Player winnerPlayer = winner == null ? null : Bukkit.getPlayer(winner.playerId());
             recoveryTeleportIds.add(expired.playerId());
             runtimeStateStore.saveRecoveryTeleportIds(recoveryTeleportIds);
             LoadoutSnapshot snapshot = disconnectSnapshots.get(expired.playerId());
-            if (winner != null && snapshot != null) {
-                spoilsService.createSpoilsFromSnapshot(winner.playerId(), winner.name(), expired.playerId(), expired.name(), snapshot);
+            MatchParticipant spoilsRecipient = selectSpoilsRecipient(expired.playerId(), null);
+            if (spoilsRecipient != null && snapshot != null) {
+                spoilsService.createSpoilsFromSnapshot(
+                    spoilsRecipient.playerId(), spoilsRecipient.name(), expired.playerId(), expired.name(), snapshot
+                );
             }
             spoilsService.markForcedDeathOnJoin(expired.playerId());
-            if (winnerPlayer != null) {
-                sendToParticipants("messages.disconnect-loss", PLAYER_PLACEHOLDER, expired.name());
+            eliminatedParticipantIds.add(expired.playerId());
+            activeParticipantIndex.remove(expired.playerId());
+            sendToParticipants("messages.disconnect-loss", PLAYER_PLACEHOLDER, expired.name());
+            Optional<MatchTeam> winningTeam = TeamMatchPolicy.winningTeam(activeDuel, eliminatedParticipantIds);
+            if (winningTeam.isEmpty()) {
+                runtimeStateStore.queueActiveDuelSave(activeDuel, eliminatedParticipantIds);
+                return;
             }
-            concludeDuel(winnerPlayer, DuelEndReason.DISCONNECT_TIMEOUT, true);
+            concludeDuel(winningTeam.get(), DuelEndReason.DISCONNECT_TIMEOUT, true);
         }, 20L, 20L);
     }
 
@@ -1902,7 +2524,10 @@ public final class DuelService {
             return null;
         }
         long now = System.currentTimeMillis();
-        for (MatchParticipant participant : List.of(activeDuel.participantOne(), activeDuel.participantTwo())) {
+        for (MatchParticipant participant : activeDuel.participants()) {
+            if (eliminatedParticipantIds.contains(participant.playerId())) {
+                continue;
+            }
             Long deadline = participant.disconnectDeadlineEpochMs();
             if (deadline != null && now >= deadline) {
                 return participant;
@@ -1915,8 +2540,8 @@ public final class DuelService {
         if (activeDuel == null) {
             return false;
         }
-        return activeDuel.participantOne().disconnectDeadlineEpochMs() != null
-            || activeDuel.participantTwo().disconnectDeadlineEpochMs() != null;
+        return activeDuel.participants().stream()
+            .anyMatch(participant -> participant.disconnectDeadlineEpochMs() != null);
     }
 
     private void cancelRequestExpiryTask() {
@@ -1950,8 +2575,7 @@ public final class DuelService {
                 cancelContainmentTask();
                 return;
             }
-            enforceParticipantContainment(activeDuel.participantOne().playerId());
-            enforceParticipantContainment(activeDuel.participantTwo().playerId());
+            activeDuel.participants().forEach(participant -> enforceParticipantContainment(participant.playerId()));
         }, 5L, 5L);
     }
 
@@ -2023,8 +2647,7 @@ public final class DuelService {
             return;
         }
         double each = activeDuel.settings().getWager();
-        economyPort.deposit(activeDuel.participantOne().playerId(), each);
-        economyPort.deposit(activeDuel.participantTwo().playerId(), each);
+        activeDuel.participants().forEach(participant -> economyPort.deposit(participant.playerId(), each));
         activeDuel.setWagerHeld(false);
         activeDuel.setWagerPot(0D);
     }
@@ -2034,8 +2657,7 @@ public final class DuelService {
             return;
         }
         double each = duel.settings().getWager();
-        economyPort.deposit(duel.participantOne().playerId(), each);
-        economyPort.deposit(duel.participantTwo().playerId(), each);
+        duel.participants().forEach(participant -> economyPort.deposit(participant.playerId(), each));
         duel.setWagerHeld(false);
         duel.setWagerPot(0D);
     }
@@ -2049,7 +2671,8 @@ public final class DuelService {
         if (activeDuel == null) {
             return;
         }
-        for (UUID playerId : List.of(activeDuel.participantOne().playerId(), activeDuel.participantTwo().playerId())) {
+        for (MatchParticipant participant : activeDuel.participants()) {
+            UUID playerId = participant.playerId();
             if (!eliminatedParticipantIds.contains(playerId)) {
                 activeParticipantIndex.add(playerId);
             }
@@ -2062,9 +2685,37 @@ public final class DuelService {
         Location pos2 = parseLocation(worldName, config.getString("arena.pos2", "10,70,10"));
         Location spawn1 = exactSpawn(parseLocation(worldName, config.getString("arena.spawn1", "2,65,2")), 180.0F);
         Location spawn2 = exactSpawn(parseLocation(worldName, config.getString("arena.spawn2", "8,65,8")), 0.0F);
+        List<Location> teamOneSpawns = List.of(
+            spawn1,
+            exactSpawn(parseLocation(worldName, config.getString("arena.team1-spawn2", offsetLocation(spawn1, 2D))), 180.0F),
+            exactSpawn(parseLocation(worldName, config.getString("arena.team1-spawn3", offsetLocation(spawn1, -2D))), 180.0F)
+        );
+        List<Location> teamTwoSpawns = List.of(
+            spawn2,
+            exactSpawn(parseLocation(worldName, config.getString("arena.team2-spawn2", offsetLocation(spawn2, 2D))), 0.0F),
+            exactSpawn(parseLocation(worldName, config.getString("arena.team2-spawn3", offsetLocation(spawn2, -2D))), 0.0F)
+        );
         Location spectator = parseLocation(worldName, config.getString("arena.spectator", "5,75,5"));
         Location exit = parseLocation(worldName, config.getString("arena.exit", "0,80,0"));
-        return new ArenaDefinition(worldName, pos1, pos2, spawn1, spawn2, spectator, exit);
+        return new ArenaDefinition(worldName, pos1, pos2, teamOneSpawns, teamTwoSpawns, spectator, exit);
+    }
+
+    private void cancelDuelTimeLimitTask() {
+        if (duelTimeLimitTask != null) {
+            duelTimeLimitTask.cancel();
+            duelTimeLimitTask = null;
+        }
+    }
+
+    private void cancelDeathResolutionTask() {
+        if (deathResolutionTask != null) {
+            deathResolutionTask.cancel();
+            deathResolutionTask = null;
+        }
+    }
+
+    private String offsetLocation(Location base, double xOffset) {
+        return (base.getX() + xOffset) + "," + base.getY() + "," + base.getZ();
     }
 
     private Location exactSpawn(Location base, float yaw) {
@@ -2139,20 +2790,10 @@ public final class DuelService {
         if (activeDuel == null) {
             return Set.of();
         }
-        UUID participantOne = activeDuel.participantOne().playerId();
-        UUID participantTwo = activeDuel.participantTwo().playerId();
-        boolean firstEliminated = eliminatedParticipantIds.contains(participantOne);
-        boolean secondEliminated = eliminatedParticipantIds.contains(participantTwo);
-        if (firstEliminated && secondEliminated) {
-            return Set.of();
-        }
-        if (firstEliminated) {
-            return Set.of(participantTwo);
-        }
-        if (secondEliminated) {
-            return Set.of(participantOne);
-        }
-        return Set.of(participantOne, participantTwo);
+        return activeDuel.participants().stream()
+            .map(MatchParticipant::playerId)
+            .filter(playerId -> !eliminatedParticipantIds.contains(playerId))
+            .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
     private void sendMessageOrFallback(Player player, String path, String fallback) {
@@ -2205,13 +2846,11 @@ public final class DuelService {
         if (activeDuel == null) {
             return;
         }
-        Player one = Bukkit.getPlayer(activeDuel.participantOne().playerId());
-        Player two = Bukkit.getPlayer(activeDuel.participantTwo().playerId());
-        if (one != null) {
-            sendMessage(one, path, replacements);
-        }
-        if (two != null) {
-            sendMessage(two, path, replacements);
+        for (MatchParticipant participant : activeDuel.participants()) {
+            Player player = Bukkit.getPlayer(participant.playerId());
+            if (player != null) {
+                sendMessage(player, path, replacements);
+            }
         }
     }
 
@@ -2226,7 +2865,7 @@ public final class DuelService {
         Bukkit.broadcastMessage(prefix + color(message));
     }
 
-    private void broadcastWatchPrompt(UUID participantOne, UUID participantTwo) {
+    private void broadcastWatchPrompt(Set<UUID> participantIds) {
         String message = plugin.getConfig().getString("messages.duel-watch-broadcast", "");
         if (message == null || message.isEmpty()) {
             return;
@@ -2237,7 +2876,7 @@ public final class DuelService {
                 .clickEvent(ClickEvent.runCommand("/duel watch"))
                 .hoverEvent(net.kyori.adventure.text.event.HoverEvent.showText(Component.text(ChatColor.stripColor(color(hover)), NamedTextColor.GRAY))));
         for (Player player : Bukkit.getOnlinePlayers()) {
-            if (player.getUniqueId().equals(participantOne) || player.getUniqueId().equals(participantTwo)) {
+            if (participantIds.contains(player.getUniqueId())) {
                 continue;
             }
             if (!player.hasPermission(PermissionPolicy.SPECTATE_USE)) {
@@ -2279,6 +2918,11 @@ public final class DuelService {
 
     private Location exitLocation() {
         return spawnPort.resolveSpawnFallback(arena == null ? null : arena.exit());
+    }
+
+    private boolean hasOpposingSameIp(List<Player> firstTeam, List<Player> secondTeam) {
+        return !allowSameIp && firstTeam.stream().anyMatch(first ->
+            secondTeam.stream().anyMatch(second -> sameIp(first, second)));
     }
 
     private boolean sameIp(Player a, Player b) {
@@ -2450,15 +3094,15 @@ public final class DuelService {
         return String.format(Locale.US, "%.2f", amount);
     }
 
-    private void startCountdown(Player requester, Player target) {
+    private void startCountdown(List<Player> participants) {
         cancelCountdownTask();
         if (startCountdownSeconds <= 0) {
             duelCountdownActive = false;
+            startDuelTimeLimit();
             return;
         }
         duelCountdownActive = true;
-        applyCountdownLock(requester);
-        applyCountdownLock(target);
+        participants.forEach(this::applyCountdownLock);
         final int[] secondsLeft = {startCountdownSeconds};
         countdownTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             if (activeDuel == null) {
@@ -2467,23 +3111,67 @@ public final class DuelService {
             }
             if (secondsLeft[0] <= 0) {
                 duelCountdownActive = false;
-                clearCountdownLock(requester);
-                clearCountdownLock(target);
-                playCountdownSound(requester, true);
-                playCountdownSound(target, true);
-                showCountdownTitle(requester, "&aFight!", "&7You are released.");
-                showCountdownTitle(target, "&aFight!", "&7You are released.");
+                for (Player participant : participants) {
+                    clearCountdownLock(participant);
+                    playCountdownSound(participant, true);
+                    showCountdownTitle(participant, "&aFight!", "&7You are released.");
+                }
                 sendToParticipants("messages.duel-released");
+                startDuelTimeLimit();
                 cancelCountdownTask();
                 return;
             }
-            playCountdownSound(requester, false);
-            playCountdownSound(target, false);
-            showCountdownTitle(requester, "&6" + secondsLeft[0], "&7Prepare to fight");
-            showCountdownTitle(target, "&6" + secondsLeft[0], "&7Prepare to fight");
+            for (Player participant : participants) {
+                playCountdownSound(participant, false);
+                showCountdownTitle(participant, "&6" + secondsLeft[0], "&7Prepare to fight");
+            }
             sendToParticipants("messages.duel-countdown", "{seconds}", String.valueOf(secondsLeft[0]));
             secondsLeft[0]--;
         }, 0L, 20L);
+    }
+
+    private void startDuelTimeLimit() {
+        cancelDuelTimeLimitTask();
+        if (activeDuel == null) {
+            return;
+        }
+        if (duelTimeLimitSeconds <= 0) {
+            activeDuel.setDuelDeadlineEpochMs(null);
+            runtimeStateStore.queueActiveDuelSave(activeDuel, eliminatedParticipantIds);
+            return;
+        }
+        long now = System.currentTimeMillis();
+        Long deadline = activeDuel.duelDeadlineEpochMs();
+        if (deadline == null) {
+            deadline = DuelDurationPolicy.deadlineEpochMs(now, duelTimeLimitSeconds);
+            activeDuel.setDuelDeadlineEpochMs(deadline);
+            runtimeStateStore.queueActiveDuelSave(activeDuel, eliminatedParticipantIds);
+        }
+        long delayTicks = Math.max(1L, DuelDurationPolicy.remainingTicks(deadline, now));
+        duelTimeLimitTask = Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            duelTimeLimitTask = null;
+            if (activeDuel != null && !duelEnding) {
+                concludeDuel((Player) null, DuelEndReason.DRAW, true);
+            }
+        }, delayTicks);
+    }
+
+    private void sendRaw(List<Player> participants, String message) {
+        for (Player participant : participants) {
+            if (participant != null) {
+                sendMessageRaw(participant, message);
+            }
+        }
+    }
+
+    private String teamLabel(MatchTeam team) {
+        return team.participants().stream().map(MatchParticipant::name).collect(java.util.stream.Collectors.joining(" + "));
+    }
+
+    private String winnerAnnouncement(ActiveDuel duel, UUID winnerId, String winnerName) {
+        MatchTeam team = duel.teamOf(winnerId);
+        return duel.matchType() == DuelMatchType.PARTY && team != null
+            ? "Party [" + teamLabel(team) + "]" : winnerName;
     }
 
     private void applyCountdownLock(Player player) {
@@ -2525,6 +3213,9 @@ public final class DuelService {
         private boolean involves(UUID playerId) {
             return requesterId.equals(playerId) || targetId.equals(playerId);
         }
+    }
+
+    private record PendingDeath(MatchParticipant participant, UUID killerId, List<ItemStack> drops) {
     }
 
     public boolean consumePendingForcedDeath(UUID playerId) {

@@ -1,0 +1,14 @@
+✔ missing clauses are rejected at the next header and EOF (3.1285ms)
+✔ blank responses remain rejected and valid patterns remain accepted (0.4306ms)
+✔ malformed JSON reports an actionable error without changing the file (52.6731ms)
+✔ non-object state is rejected clearly (220.0055ms)
+✔ failed rename preserves state and removes its temporary file (58.9562ms)
+✔ successful transitions rename within the same directory and retain gates (100.4281ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 502.064

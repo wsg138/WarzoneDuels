@@ -170,6 +170,9 @@ public final class SpoilsService {
         cleanupEmptyEntry(entry.entryId());
         player.updateInventory();
         save();
+        if (plugin.statsService() != null) {
+            plugin.statsService().recordSpoilsClaim(player.getUniqueId(), player.getName());
+        }
         return true;
     }
 
@@ -196,6 +199,9 @@ public final class SpoilsService {
         cleanupEmptyEntry(entry.entryId());
         player.updateInventory();
         save();
+        if (claimed > 0 && plugin.statsService() != null) {
+            plugin.statsService().recordSpoilsClaim(player.getUniqueId(), player.getName());
+        }
         return claimed;
     }
 

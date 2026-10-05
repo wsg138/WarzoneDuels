@@ -1,0 +1,143 @@
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by org.fusesource.jansi.internal.JansiLoader in an unnamed module (file:/C:/Users/p_ric/Documents/Codex/2026-09-13/create-a-new-plugin-called-itemsignature/.tools/apache-maven-3.9.9/lib/jansi-2.4.1.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by com.google.common.util.concurrent.AbstractFuture$UnsafeAtomicHelper (file:/C:/Users/p_ric/Documents/Codex/2026-09-13/create-a-new-plugin-called-itemsignature/.tools/apache-maven-3.9.9/lib/guava-33.2.1-jre.jar)
+WARNING: Please consider reporting this to the maintainers of class com.google.common.util.concurrent.AbstractFuture$UnsafeAtomicHelper
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ---------------------< dev.minecraft:WarzoneDuels >---------------------
+[INFO] Building WarzoneDuels 1.0.2
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ WarzoneDuels ---
+[INFO] Copying 3 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ WarzoneDuels ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ WarzoneDuels ---
+[INFO] skip non existing resourceDirectory C:\Users\p_ric\Documents\Codex\2026-09-17\get-started-on-the-warzoneduels-update\src\test\resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ WarzoneDuels ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 27 source files with javac [debug release 25] to target\test-classes
+[WARNING] /C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/src/test/java/dev/minecraft/warzoneduels/adapter/bukkit/persistence/DuelAnalyticsTransactionTest.java:[10,16] sun.misc.Unsafe is internal proprietary API and may be removed in a future release
+[WARNING] /C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/src/test/java/dev/minecraft/warzoneduels/app/PlaytestRegressionTest.java:[6,16] sun.misc.Unsafe is internal proprietary API and may be removed in a future release
+[WARNING] /C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/src/test/java/dev/minecraft/warzoneduels/adapter/bukkit/persistence/DuelAnalyticsTransactionTest.java:[97,29] sun.misc.Unsafe is internal proprietary API and may be removed in a future release
+[WARNING] /C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/src/test/java/dev/minecraft/warzoneduels/adapter/bukkit/persistence/DuelAnalyticsTransactionTest.java:[99,9] sun.misc.Unsafe is internal proprietary API and may be removed in a future release
+[WARNING] /C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/src/test/java/dev/minecraft/warzoneduels/adapter/bukkit/persistence/DuelAnalyticsTransactionTest.java:[99,26] sun.misc.Unsafe is internal proprietary API and may be removed in a future release
+[WARNING] /C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/src/test/java/dev/minecraft/warzoneduels/app/PlaytestRegressionTest.java:[16,27] sun.misc.Unsafe is internal proprietary API and may be removed in a future release
+[WARNING] /C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/src/test/java/dev/minecraft/warzoneduels/app/PlaytestRegressionTest.java:[18,47] sun.misc.Unsafe is internal proprietary API and may be removed in a future release
+[INFO] 
+[INFO] --- surefire:3.5.2:test (default-test) @ WarzoneDuels ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running dev.minecraft.warzoneduels.adapter.bukkit.persistence.DuelAnalyticsTransactionTest
+Sep 18, 2026 10:36:53 AM dev.minecraft.warzoneduels.adapter.bukkit.persistence.DuelAnalyticsStore insert
+WARNING: Failed to persist duel record: Unique index or primary key violation: "PUBLIC.PRIMARY_KEY_78 ON PUBLIC.DUEL_RECORDS(REFERENCE) VALUES ( /* 1 */ 'existing' )"; SQL statement:
+INSERT INTO duel_records (
+    reference, started_at, ended_at, duration_ms,
+    player_one_id, player_one_name, player_two_id, player_two_name,
+    winner_id, winner_name, loser_id, loser_name,
+    map_id, map_name, ruleset, item_rules,
+    end_reason, counted_as_match, spectator_count, wager,
+    match_type, team_size
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) [23505-224]
+Sep 18, 2026 10:36:53 AM dev.minecraft.warzoneduels.adapter.bukkit.persistence.DuelAnalyticsStore insert
+WARNING: Failed to persist duel record: Unique index or primary key violation: "PUBLIC.PRIMARY_KEY_7 ON PUBLIC.DUEL_RECORD_PARTICIPANTS(DUEL_REFERENCE, PLAYER_ID) VALUES ( /* key:3 */ 'failed', '40e28e63-3c8d-4363-adc2-f07d904a787e')"; SQL statement:
+INSERT INTO duel_record_participants (
+    duel_reference, player_id, player_name, team_index, winner
+) VALUES (?, ?, ?, ?, ?) [23505-224]
+Sep 18, 2026 10:36:53 AM dev.minecraft.warzoneduels.adapter.bukkit.persistence.DuelAnalyticsStore insert
+WARNING: Failed to persist duel record: Unique index or primary key violation: "PUBLIC.PRIMARY_KEY_7 ON PUBLIC.DUEL_RECORD_PARTICIPANTS(DUEL_REFERENCE, PLAYER_ID) VALUES ( /* key:1 */ 'retry', '35516f65-c4d2-4d95-8d87-2391d3db0769')"; SQL statement:
+INSERT INTO duel_record_participants (
+    duel_reference, player_id, player_name, team_index, winner
+) VALUES (?, ?, ?, ?, ?) [23505-224]
+[ERROR] Tests run: 4, Failures: 2, Errors: 0, Skipped: 0, Time elapsed: 0.284 s <<< FAILURE! -- in dev.minecraft.warzoneduels.adapter.bukkit.persistence.DuelAnalyticsTransactionTest
+[ERROR] dev.minecraft.warzoneduels.adapter.bukkit.persistence.DuelAnalyticsTransactionTest.failureInsideCallerTransactionPreservesEarlierWrites -- Time elapsed: 0.016 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: expected: <1> but was: <2>
+	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
+	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
+	at org.junit.jupiter.api.AssertEquals.failNotEqual(AssertEquals.java:197)
+	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:166)
+	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:161)
+	at org.junit.jupiter.api.Assertions.assertEquals(Assertions.java:632)
+	at dev.minecraft.warzoneduels.adapter.bukkit.persistence.DuelAnalyticsTransactionTest.failureInsideCallerTransactionPreservesEarlierWrites(DuelAnalyticsTransactionTest.java:66)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+
+[ERROR] dev.minecraft.warzoneduels.adapter.bukkit.persistence.DuelAnalyticsTransactionTest.participantFailureRollsBackParentAndPartialBatchAndAllowsRetry -- Time elapsed: 0.010 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: expected: <0> but was: <1>
+	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
+	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
+	at org.junit.jupiter.api.AssertEquals.failNotEqual(AssertEquals.java:197)
+	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:166)
+	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:161)
+	at org.junit.jupiter.api.Assertions.assertEquals(Assertions.java:632)
+	at dev.minecraft.warzoneduels.adapter.bukkit.persistence.DuelAnalyticsTransactionTest.participantFailureRollsBackParentAndPartialBatchAndAllowsRetry(DuelAnalyticsTransactionTest.java:38)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+
+[INFO] Running dev.minecraft.warzoneduels.app.DuelChallengeServiceTest
+[ERROR] Tests run: 5, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 0.023 s <<< FAILURE! -- in dev.minecraft.warzoneduels.app.DuelChallengeServiceTest
+[ERROR] dev.minecraft.warzoneduels.app.DuelChallengeServiceTest.expiredChallengeCanBeReplacedWithoutAnIntermediateLookup -- Time elapsed: 0.001 s <<< ERROR!
+java.lang.IllegalStateException: A Duel Party roster is already locked by another challenge.
+	at dev.minecraft.warzoneduels.app.DuelChallengeService.ensureRosterAvailable(DuelChallengeService.java:139)
+	at dev.minecraft.warzoneduels.app.DuelChallengeService.createPartyChallenge(DuelChallengeService.java:45)
+	at dev.minecraft.warzoneduels.app.DuelChallengeServiceTest.expiredChallengeCanBeReplacedWithoutAnIntermediateLookup(DuelChallengeServiceTest.java:24)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+
+[INFO] Running dev.minecraft.warzoneduels.domain.ActiveDuelTeamTest
+[ERROR] Tests run: 4, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 0.007 s <<< FAILURE! -- in dev.minecraft.warzoneduels.domain.ActiveDuelTeamTest
+[ERROR] dev.minecraft.warzoneduels.domain.ActiveDuelTeamTest.normalRejectsMultiMemberTeamsButBothTypesAllowSingletons -- Time elapsed: 0.002 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: Expected java.lang.IllegalArgumentException to be thrown, but nothing was thrown.
+	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:152)
+	at org.junit.jupiter.api.AssertThrows.assertThrows(AssertThrows.java:73)
+	at org.junit.jupiter.api.AssertThrows.assertThrows(AssertThrows.java:35)
+	at org.junit.jupiter.api.Assertions.assertThrows(Assertions.java:3128)
+	at dev.minecraft.warzoneduels.domain.ActiveDuelTeamTest.normalRejectsMultiMemberTeamsButBothTypesAllowSingletons(ActiveDuelTeamTest.java:17)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+
+[INFO] 
+[INFO] Results:
+[INFO] 
+[ERROR] Failures: 
+[ERROR]   DuelAnalyticsTransactionTest.failureInsideCallerTransactionPreservesEarlierWrites:66 expected: <1> but was: <2>
+[ERROR]   DuelAnalyticsTransactionTest.participantFailureRollsBackParentAndPartialBatchAndAllowsRetry:38 expected: <0> but was: <1>
+[ERROR]   ActiveDuelTeamTest.normalRejectsMultiMemberTeamsButBothTypesAllowSingletons:17 Expected java.lang.IllegalArgumentException to be thrown, but nothing was thrown.
+[ERROR] Errors: 
+[ERROR]   DuelChallengeServiceTest.expiredChallengeCanBeReplacedWithoutAnIntermediateLookup:24 � IllegalState A Duel Party roster is already locked by another challenge.
+[INFO] 
+[ERROR] Tests run: 13, Failures: 3, Errors: 1, Skipped: 0
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  3.025 s
+[INFO] Finished at: 2026-09-18T10:36:53-04:00
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.5.2:test (default-test) on project WarzoneDuels: There are test failures.
+[ERROR] 
+[ERROR] See C:\Users\p_ric\Documents\Codex\2026-09-17\get-started-on-the-warzoneduels-update\target\surefire-reports for the individual test results.
+[ERROR] See dump files (if any exist) [date].dump, [date]-jvmRun[N].dump and [date].dumpstream.
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException

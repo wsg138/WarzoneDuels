@@ -12,7 +12,7 @@ For a clean verification pass:
 mvn clean test
 ```
 
-Surefire output is written under `target/surefire-reports/`. Pull requests also run `.github/workflows/tests.yml`, which executes a clean Maven test pass on Java 21. `MANUAL_TESTING.md` remains the separate live-server acceptance checklist for gameplay that requires real Paper/world/player behavior.
+Surefire output is written under `target/surefire-reports/`. Pull requests run `.github/workflows/tests.yml` on Java 25 against the exact PR head. `.github/workflows/verify.yml` validates SPEAR, verifies both pinned Paper APIs, and builds the stable 26.2 shaded testing JAR last. The hosted artifact includes `source-commit.txt` and `SHA256SUMS`; the unshaded `original-` JAR is excluded. `MANUAL_TESTING.md` remains the separate live-server acceptance checklist for gameplay that requires real Paper/world/player behavior.
 
 ## Automated coverage currently protecting
 

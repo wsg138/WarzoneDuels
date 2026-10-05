@@ -3,8 +3,10 @@ package dev.minecraft.warzoneduels.adapter.bukkit.command;
 import dev.minecraft.warzoneduels.adapter.bukkit.spoils.SpoilsGuiFactory;
 import dev.minecraft.warzoneduels.adapter.bukkit.gui.DuelGui;
 import dev.minecraft.warzoneduels.app.DuelService;
+import dev.minecraft.warzoneduels.app.DuelPartyService;
 import dev.minecraft.warzoneduels.app.SpoilsService;
 import dev.minecraft.warzoneduels.domain.BuilderSession;
+import dev.minecraft.warzoneduels.domain.DuelParty;
 import dev.minecraft.warzoneduels.domain.spoils.SpoilsEntry;
 import dev.minecraft.warzoneduels.permission.PermissionPolicy;
 import org.bukkit.ChatColor;
@@ -18,6 +20,8 @@ import org.bukkit.entity.Player;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
+import java.util.UUID;
 
 public final class DuelCommand implements CommandExecutor, TabCompleter {
     private static final String DRAW_COMMAND = "draw";
@@ -32,17 +36,26 @@ public final class DuelCommand implements CommandExecutor, TabCompleter {
     private static final int TWO_ARGUMENTS = 2;
     private static final int LOCATION_ARGUMENT_COUNT = 4;
     private static final List<String> DEFAULT_MAP_IDS = List.of("flat_arena", "forest", "desert");
+    private static final List<String> PARTY_OPERATIONS = List.of(
+        "create", "invite", "accept", "decline", "info", "leave", "kick", "transfer", "disband"
+    );
 
     private final DuelService duelService;
     private final SpoilsService spoilsService;
+    private final DuelPartyService partyService;
 
-    public DuelCommand(DuelService duelService, SpoilsService spoilsService) {
+    public DuelCommand(DuelService duelService, SpoilsService spoilsService, DuelPartyService partyService) {
         this.duelService = duelService;
         this.spoilsService = spoilsService;
+        this.partyService = partyService;
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (!isDrawCommandAlias(command) && args.length > 0 && "mode".equalsIgnoreCase(args[0])) {
+            handleModeCommand(sender, args);
+            return true;
+        }
         if (!(sender instanceof Player player)) {
             sender.sendMessage("Players only.");
             return true;
@@ -94,6 +107,7 @@ public final class DuelCommand implements CommandExecutor, TabCompleter {
             case "vault" -> openSpoils(player);
             case STATS_COMMAND -> player.performCommand(args.length >= TWO_ARGUMENTS ? STATS_COMMAND + " " + args[1] : STATS_COMMAND);
             case "info", "settings" -> duelService.showSettings(player);
+            case "party" -> handlePartyCommand(player, args);
             case RELOAD_COMMAND -> handleReload(player);
             case RESTORE_LOADOUT_COMMAND -> handleRestoreLoadout(player, args);
             case MAP_SAVE_COMMAND -> handleMapSave(player, args);
@@ -111,12 +125,28 @@ public final class DuelCommand implements CommandExecutor, TabCompleter {
             return List.of();
         }
         List<String> result = new ArrayList<>();
+        if (sender.hasPermission(PermissionPolicy.ADMIN_MODES)) {
+            if (!(sender instanceof Player) && args.length == 1 && "mode".startsWith(args[0].toLowerCase(Locale.ROOT))) {
+                result.add("mode");
+            } else if (args.length == 2 && "mode".equalsIgnoreCase(args[0])) {
+                addMatchingOptions(result, List.of("2v2", "3v3"), args[1].toLowerCase(Locale.ROOT));
+                return result;
+            } else if (args.length == 3 && "mode".equalsIgnoreCase(args[0])
+                && ("2v2".equalsIgnoreCase(args[1]) || "3v3".equalsIgnoreCase(args[1]))) {
+                addMatchingOptions(result, List.of("enable", "disable", "status"), args[2].toLowerCase(Locale.ROOT));
+                return result;
+            }
+        }
         if (args.length == ROOT_ARGUMENT_COUNT) {
             addRootCompletions(sender, result, args[0].toLowerCase(Locale.ROOT));
             return result;
         }
         if (shouldCompleteOnlinePlayers(sender, args)) {
             addOnlinePlayerCompletions(sender, result, args[1].toLowerCase(Locale.ROOT));
+            return result;
+        }
+        if (sender instanceof Player player && args.length >= TWO_ARGUMENTS && "party".equalsIgnoreCase(args[0])) {
+            addPartyCompletions(player, result, args);
             return result;
         }
         if (shouldCompleteMapIds(sender, args)) {
@@ -133,6 +163,42 @@ public final class DuelCommand implements CommandExecutor, TabCompleter {
         if (sender.hasPermission(PermissionPolicy.CHALLENGE)) {
             addOnlinePlayerCompletions(sender, result, typed);
         }
+    }
+
+    private void handleModeCommand(CommandSender sender, String[] args) {
+        if (!sender.hasPermission(PermissionPolicy.ADMIN_MODES)) {
+            sender.sendMessage(ChatColor.RED + "You do not have permission.");
+            return;
+        }
+        if (args.length == 1) {
+            sendModeStatus(sender, 2);
+            sendModeStatus(sender, 3);
+            return;
+        }
+        int teamSize = switch (args[1].toLowerCase(Locale.ROOT)) {
+            case "2v2" -> 2;
+            case "3v3" -> 3;
+            default -> 0;
+        };
+        String action = args.length == 2 ? "status" : args[2].toLowerCase(Locale.ROOT);
+        if (teamSize == 0 || args.length > 3 || !List.of("enable", "disable", "status").contains(action)) {
+            sender.sendMessage(ChatColor.YELLOW + "Usage: /duel mode <2v2|3v3> <enable|disable|status>");
+            return;
+        }
+        if (!"status".equals(action)) {
+            try {
+                duelService.setDuelModeEnabled(teamSize, "enable".equals(action));
+            } catch (java.io.IOException ex) {
+                sender.sendMessage(ChatColor.RED + "Could not save duel modes. The previous setting was retained.");
+                return;
+            }
+        }
+        sendModeStatus(sender, teamSize);
+    }
+
+    private void sendModeStatus(CommandSender sender, int teamSize) {
+        sender.sendMessage(ChatColor.YELLOW + "Duel mode " + teamSize + "v" + teamSize + ": "
+            + (duelService.isDuelModeEnabled(teamSize) ? ChatColor.GREEN + "enabled" : ChatColor.RED + "disabled"));
     }
 
     private void addVisibleCommandSuggestions(CommandSender sender, List<String> result, String typed) {
@@ -190,6 +256,203 @@ public final class DuelCommand implements CommandExecutor, TabCompleter {
         List<String> visible = PermissionPolicy.visibleRootSuggestions(player::hasPermission, activeWatcher);
         String challenge = player.hasPermission(PermissionPolicy.CHALLENGE) ? "player|" : "";
         player.sendMessage(ChatColor.YELLOW + "Usage: /duel <" + challenge + String.join("|", visible) + ">");
+    }
+
+    private void handlePartyCommand(Player player, String[] args) {
+        String operation = args.length < TWO_ARGUMENTS ? "info" : args[1].toLowerCase(Locale.ROOT);
+        try {
+            switch (operation) {
+                case "create" -> createParty(player);
+                case "invite" -> inviteToParty(player, args);
+                case "accept" -> acceptPartyInvite(player, args);
+                case "decline" -> declinePartyInvite(player, args);
+                case "info" -> showParty(player);
+                case "leave" -> leaveParty(player);
+                case "kick" -> kickPartyMember(player, args);
+                case "transfer" -> transferPartyLeadership(player, args);
+                case "disband" -> disbandParty(player);
+                default -> sendPartyUsage(player);
+            }
+        } catch (IllegalArgumentException | IllegalStateException ex) {
+            player.sendMessage(ChatColor.RED + ex.getMessage());
+        }
+    }
+
+    private void createParty(Player player) {
+        partyService.createParty(player.getUniqueId(), player.getName());
+        player.sendMessage(ChatColor.GREEN + "Created a Duel Party. You are the leader.");
+    }
+
+    private void inviteToParty(Player player, String[] args) {
+        if (args.length < 3) {
+            player.sendMessage(ChatColor.RED + "Usage: /duel party invite <player>");
+            return;
+        }
+        Player target = player.getServer().getPlayer(args[2]);
+        if (target == null || !target.isOnline()) {
+            duelService.sendMessage(player, TARGET_OFFLINE_MESSAGE);
+            return;
+        }
+        partyService.invite(player.getUniqueId(), target.getUniqueId(), target.getName(), System.currentTimeMillis());
+        player.sendMessage(ChatColor.GREEN + "Invited " + target.getName() + " to your Duel Party.");
+        target.sendMessage(ChatColor.GOLD + player.getName() + " invited you to a Duel Party. "
+            + ChatColor.YELLOW + "Use /duel party accept " + player.getName() + " to join.");
+    }
+
+    private void acceptPartyInvite(Player player, String[] args) {
+        DuelParty party = requireInvitingParty(player, args, "accept");
+        partyService.acceptInvite(player.getUniqueId(), party.id(), System.currentTimeMillis());
+        notifyParty(party, ChatColor.GREEN + player.getName() + " joined the Duel Party.");
+    }
+
+    private void declinePartyInvite(Player player, String[] args) {
+        DuelParty party = requireInvitingParty(player, args, "decline");
+        partyService.declineInvite(player.getUniqueId(), party.id());
+        player.sendMessage(ChatColor.YELLOW + "Declined the Duel Party invitation from " + leaderName(party) + ".");
+    }
+
+    private DuelParty requireInvitingParty(Player player, String[] args, String operation) {
+        if (args.length < 3) {
+            throw new IllegalArgumentException("Usage: /duel party " + operation + " <leader>");
+        }
+        DuelParty party = findPartyByLeaderName(args[2])
+            .orElseThrow(() -> new IllegalArgumentException("No Duel Party was found for that leader."));
+        if (partyService.invitationFor(player.getUniqueId(), party.id(), System.currentTimeMillis()).isEmpty()) {
+            throw new IllegalStateException("You do not have an active invitation from that Duel Party.");
+        }
+        return party;
+    }
+
+    private void showParty(Player player) {
+        Optional<DuelParty> current = partyService.partyOf(player.getUniqueId());
+        if (current.isEmpty()) {
+            player.sendMessage(ChatColor.YELLOW + "You are not in a Duel Party. Use /duel party create to start one.");
+            return;
+        }
+        DuelParty party = current.get();
+        player.sendMessage(ChatColor.GOLD + "Duel Party (" + party.size() + "/3)"
+            + (party.isRosterLocked() ? ChatColor.RED + " [ROSTER LOCKED]" : ""));
+        for (DuelParty.DuelPartyMember member : party.members()) {
+            String suffix = member.playerId().equals(party.leaderId()) ? ChatColor.GOLD + " [Leader]" : "";
+            player.sendMessage(ChatColor.YELLOW + "- " + member.name() + suffix);
+        }
+    }
+
+    private void leaveParty(Player player) {
+        DuelParty party = partyService.partyOf(player.getUniqueId()).orElseThrow(
+            () -> new IllegalStateException("Player is not in a Duel Party."));
+        boolean leaderLeaving = party.leaderId().equals(player.getUniqueId());
+        partyService.leaveParty(player.getUniqueId());
+        if (leaderLeaving) {
+            notifyParty(party, ChatColor.YELLOW + "The Duel Party was disbanded because its leader left.");
+        } else {
+            player.sendMessage(ChatColor.YELLOW + "You left your Duel Party.");
+        }
+    }
+
+    private void kickPartyMember(Player player, String[] args) {
+        UUID memberId = requirePartyMember(player, args, "kick");
+        partyService.kickMember(player.getUniqueId(), memberId);
+        player.sendMessage(ChatColor.YELLOW + "Removed that player from your Duel Party.");
+        Player removed = player.getServer().getPlayer(memberId);
+        if (removed != null) {
+            removed.sendMessage(ChatColor.RED + "You were removed from the Duel Party.");
+        }
+    }
+
+    private void transferPartyLeadership(Player player, String[] args) {
+        UUID memberId = requirePartyMember(player, args, "transfer");
+        partyService.transferLeadership(player.getUniqueId(), memberId);
+        DuelParty party = partyService.partyOf(player.getUniqueId()).orElseThrow();
+        notifyParty(party, ChatColor.GOLD + memberName(party, memberId) + " is now the Duel Party leader.");
+    }
+
+    private UUID requirePartyMember(Player player, String[] args, String operation) {
+        if (args.length < 3) {
+            throw new IllegalArgumentException("Usage: /duel party " + operation + " <player>");
+        }
+        DuelParty party = partyService.partyOf(player.getUniqueId())
+            .orElseThrow(() -> new IllegalStateException("You are not in a Duel Party."));
+        return party.members().stream()
+            .filter(member -> member.name().equalsIgnoreCase(args[2]))
+            .map(DuelParty.DuelPartyMember::playerId)
+            .findFirst()
+            .orElseThrow(() -> new IllegalArgumentException("That player is not in your Duel Party."));
+    }
+
+    private void disbandParty(Player player) {
+        DuelParty party = partyService.partyOf(player.getUniqueId())
+            .orElseThrow(() -> new IllegalStateException("You are not in a Duel Party."));
+        List<UUID> memberIds = party.members().stream().map(DuelParty.DuelPartyMember::playerId).toList();
+        partyService.disbandParty(player.getUniqueId());
+        for (UUID memberId : memberIds) {
+            Player member = player.getServer().getPlayer(memberId);
+            if (member != null) {
+                member.sendMessage(ChatColor.RED + "The Duel Party was disbanded.");
+            }
+        }
+    }
+
+    private Optional<DuelParty> findPartyByLeaderName(String name) {
+        return partyService.parties().values().stream()
+            .filter(party -> leaderName(party).equalsIgnoreCase(name))
+            .findFirst();
+    }
+
+    private String leaderName(DuelParty party) {
+        return memberName(party, party.leaderId());
+    }
+
+    private String memberName(DuelParty party, UUID playerId) {
+        return party.members().stream()
+            .filter(member -> member.playerId().equals(playerId))
+            .map(DuelParty.DuelPartyMember::name)
+            .findFirst()
+            .orElse("Unknown");
+    }
+
+    private void notifyParty(DuelParty party, String message) {
+        for (DuelParty.DuelPartyMember member : party.members()) {
+            Player online = org.bukkit.Bukkit.getPlayer(member.playerId());
+            if (online != null) {
+                online.sendMessage(message);
+            }
+        }
+    }
+
+    private void sendPartyUsage(Player player) {
+        player.sendMessage(ChatColor.YELLOW + "Usage: /duel party <" + String.join("|", PARTY_OPERATIONS) + "> [player]");
+    }
+
+    private void addPartyCompletions(Player player, List<String> result, String[] args) {
+        if (args.length == TWO_ARGUMENTS) {
+            addMatchingOptions(result, PARTY_OPERATIONS, args[1].toLowerCase(Locale.ROOT));
+            return;
+        }
+        if (args.length != 3) {
+            return;
+        }
+        String operation = args[1].toLowerCase(Locale.ROOT);
+        String typed = args[2].toLowerCase(Locale.ROOT);
+        if ("invite".equals(operation)) {
+            addOnlinePlayerCompletions(player, result, typed);
+            return;
+        }
+        if ("kick".equals(operation) || "transfer".equals(operation)) {
+            partyService.partyOf(player.getUniqueId()).ifPresent(party -> party.members().stream()
+                .map(DuelParty.DuelPartyMember::name)
+                .filter(name -> matchesTyped(name.toLowerCase(Locale.ROOT), typed))
+                .forEach(result::add));
+            return;
+        }
+        if ("accept".equals(operation) || "decline".equals(operation)) {
+            long now = System.currentTimeMillis();
+            partyService.parties().values().stream()
+                .filter(party -> partyService.invitationFor(player.getUniqueId(), party.id(), now).isPresent())
+                .map(this::leaderName)
+                .filter(name -> matchesTyped(name.toLowerCase(Locale.ROOT), typed))
+                .forEach(result::add);
+        }
     }
 
     private String formatLocation(Location location) {
