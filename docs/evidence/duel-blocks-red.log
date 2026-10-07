@@ -1,0 +1,25 @@
+[ERROR] Tests run: 5, Failures: 0, Errors: 5, Skipped: 0, Time elapsed: 0.100 s <<< FAILURE! -- in dev.minecraft.warzoneduels.app.DuelBlockServiceTest
+[ERROR] dev.minecraft.warzoneduels.app.DuelBlockServiceTest.blocksPersistBeforeTheyAreConfirmed -- Time elapsed: 0.036 s <<< ERROR!
+[ERROR] dev.minecraft.warzoneduels.app.DuelBlockServiceTest.unreadableStorageRefusesNewChallengesInsteadOfForgettingBlocks -- Time elapsed: 0.003 s <<< ERROR!
+[ERROR] dev.minecraft.warzoneduels.app.DuelBlockServiceTest.aFailedWriteIsNotKeptInMemoryAndRefusesNewChallenges -- Time elapsed: 0.003 s <<< ERROR!
+[ERROR] dev.minecraft.warzoneduels.app.DuelBlockServiceTest.apiRequiresTheMainThreadAndRefusesSelfBlocks -- Time elapsed: 0.003 s <<< ERROR!
+[ERROR] dev.minecraft.warzoneduels.app.DuelBlockServiceTest.apiReportsStorageFailures -- Time elapsed: 0.002 s <<< ERROR!
+[ERROR] Tests run: 2, Failures: 2, Errors: 0, Skipped: 0, Time elapsed: 0.011 s <<< FAILURE! -- in dev.minecraft.warzoneduels.app.DuelBlockWiringTest
+[ERROR] dev.minecraft.warzoneduels.app.DuelBlockWiringTest.blocksGuardBuilderRequestPartyChallengeAndInvitation -- Time elapsed: 0.005 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: private boolean rejectBuilderStart( must enforce duel blocks ==> expected: <true> but was: <false>
+[ERROR] dev.minecraft.warzoneduels.app.DuelBlockWiringTest.blockCommandsHaveTheirOwnPermission -- Time elapsed: 0.003 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: expected: <warzoneduels.command.block> but was: <null>
+[ERROR] Tests run: 2, Failures: 1, Errors: 1, Skipped: 0, Time elapsed: 0.031 s <<< FAILURE! -- in dev.minecraft.warzoneduels.adapter.bukkit.persistence.YamlDuelBlockStoreTest
+[ERROR] dev.minecraft.warzoneduels.adapter.bukkit.persistence.YamlDuelBlockStoreTest.roundTripsBlocksAndStartsEmpty -- Time elapsed: 0.017 s <<< ERROR!
+[ERROR] dev.minecraft.warzoneduels.adapter.bukkit.persistence.YamlDuelBlockStoreTest.malformedFilesFailInsteadOfLoadingEmpty -- Time elapsed: 0.011 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: Unexpected exception type thrown, expected: <java.io.IOException> but was: <java.lang.UnsupportedOperationException>
+[ERROR] Tests run: 3, Failures: 1, Errors: 2, Skipped: 0, Time elapsed: 0.009 s <<< FAILURE! -- in dev.minecraft.warzoneduels.domain.DuelBlockListTest
+[ERROR] dev.minecraft.warzoneduels.domain.DuelBlockListTest.blocksAreOneWayButAnyDirectionRefusesAPair -- Time elapsed: 0.002 s <<< ERROR!
+[ERROR] dev.minecraft.warzoneduels.domain.DuelBlockListTest.selfBlocksAreRefusedAndSnapshotsAreDefensive -- Time elapsed: 0.002 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: Unexpected exception type thrown, expected: <java.lang.IllegalArgumentException> but was: <java.lang.UnsupportedOperationException>
+[ERROR] dev.minecraft.warzoneduels.domain.DuelBlockListTest.anyCrossTeamPairRefusesPartyRosters -- Time elapsed: 0.001 s <<< ERROR!
+[ERROR]   YamlDuelBlockStoreTest.malformedFilesFailInsteadOfLoadingEmpty:33 Unexpected exception type thrown, expected: <java.io.IOException> but was: <java.lang.UnsupportedOperationException>
+[ERROR]   DuelBlockWiringTest.blockCommandsHaveTheirOwnPermission:30 expected: <warzoneduels.command.block> but was: <null>
+[ERROR]   DuelBlockWiringTest.blocksGuardBuilderRequestPartyChallengeAndInvitation:20 private boolean rejectBuilderStart( must enforce duel blocks ==> expected: <true> but was: <false>
+[ERROR]   DuelBlockListTest.selfBlocksAreRefusedAndSnapshotsAreDefensive:36 Unexpected exception type thrown, expected: <java.lang.IllegalArgumentException> but was: <java.lang.UnsupportedOperationException>
+[ERROR] Tests run: 12, Failures: 4, Errors: 8, Skipped: 0

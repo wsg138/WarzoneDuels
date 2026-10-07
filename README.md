@@ -24,3 +24,9 @@ Push-Location ..\EnthusiaTags; mvn -q -DskipTests install; Pop-Location
 All non-administrative permissions default to `false`. Grant `warzoneduels.command` for ordinary duel commands, `warzoneduels.spectate` for controlled watch mode, or `warzoneduels.admin` for every command, setup action, and administrative bypass. Individual permissions are declared in `plugin.yml` under those three parents for LuckPerms assignment.
 
 The older `warzoneduels.user`, command leaf, and bypass nodes remain as deprecated compatibility aliases. New permission assignments should use the current parent hierarchy.
+
+## Duel blocks and DuelBlockApi
+
+`/duel block|unblock|blocked` (permission `warzoneduels.command.block`, granted by `warzoneduels.command`) lets players stop duel challenges and Duel Party invites with specific players. Blocks are stored in `plugins/WarzoneDuels/duel-blocks.yml` on each server; if that file cannot be read or written, new challenges and invites are refused rather than ignoring blocks.
+
+Other plugins can use the same blocks through `dev.minecraft.warzoneduels.api.DuelBlockApi`, registered with Bukkit's `ServicesManager`: `isBlocked(owner, target)` and `setBlocked(owner, target, blocked)`. Calls must be on the main thread; the API refuses self-blocks, performs no permission checks or player messages, and throws `IllegalStateException` if a change cannot be saved. EnthusiaFriends' Block Everywhere uses it.

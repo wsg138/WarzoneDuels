@@ -1,0 +1,159 @@
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by org.fusesource.jansi.internal.JansiLoader in an unnamed module (file:/C:/Users/p_ric/Documents/Codex/2026-09-13/create-a-new-plugin-called-itemsignature/.tools/apache-maven-3.9.9/lib/jansi-2.4.1.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by com.google.common.util.concurrent.AbstractFuture$UnsafeAtomicHelper (file:/C:/Users/p_ric/Documents/Codex/2026-09-13/create-a-new-plugin-called-itemsignature/.tools/apache-maven-3.9.9/lib/guava-33.2.1-jre.jar)
+WARNING: Please consider reporting this to the maintainers of class com.google.common.util.concurrent.AbstractFuture$UnsafeAtomicHelper
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ---------------------< dev.minecraft:WarzoneDuels >---------------------
+[INFO] Building WarzoneDuels 1.0.3
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- clean:3.2.0:clean (default-clean) @ WarzoneDuels ---
+[INFO] Deleting C:\Users\p_ric\Documents\Codex\2026-09-17\get-started-on-the-warzoneduels-update\target
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ WarzoneDuels ---
+[INFO] Copying 3 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ WarzoneDuels ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 95 source files with javac [debug release 25] to target\classes
+[WARNING] /C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/src/main/java/dev/minecraft/warzoneduels/adapter/bukkit/listener/DuelListener.java:[833,46] CHORUS_FRUIT in org.bukkit.event.player.PlayerTeleportEvent.TeleportCause has been deprecated and marked for removal
+[WARNING] /C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/src/main/java/dev/minecraft/warzoneduels/adapter/bukkit/listener/DuelListener.java:[839,60] CHORUS_FRUIT in org.bukkit.event.player.PlayerTeleportEvent.TeleportCause has been deprecated and marked for removal
+[INFO] /C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/src/main/java/dev/minecraft/warzoneduels/app/DuelService.java: Some input files use or override a deprecated API.
+[INFO] /C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/src/main/java/dev/minecraft/warzoneduels/app/DuelService.java: Recompile with -Xlint:deprecation for details.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ WarzoneDuels ---
+[INFO] skip non existing resourceDirectory C:\Users\p_ric\Documents\Codex\2026-09-17\get-started-on-the-warzoneduels-update\src\test\resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ WarzoneDuels ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 27 source files with javac [debug release 25] to target\test-classes
+[WARNING] /C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/src/test/java/dev/minecraft/warzoneduels/adapter/bukkit/persistence/DuelAnalyticsTransactionTest.java:[10,16] sun.misc.Unsafe is internal proprietary API and may be removed in a future release
+[WARNING] /C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/src/test/java/dev/minecraft/warzoneduels/app/PlaytestRegressionTest.java:[6,16] sun.misc.Unsafe is internal proprietary API and may be removed in a future release
+[WARNING] /C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/src/test/java/dev/minecraft/warzoneduels/adapter/bukkit/persistence/DuelAnalyticsTransactionTest.java:[144,29] sun.misc.Unsafe is internal proprietary API and may be removed in a future release
+[WARNING] /C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/src/test/java/dev/minecraft/warzoneduels/adapter/bukkit/persistence/DuelAnalyticsTransactionTest.java:[146,9] sun.misc.Unsafe is internal proprietary API and may be removed in a future release
+[WARNING] /C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/src/test/java/dev/minecraft/warzoneduels/adapter/bukkit/persistence/DuelAnalyticsTransactionTest.java:[146,26] sun.misc.Unsafe is internal proprietary API and may be removed in a future release
+[WARNING] /C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/src/test/java/dev/minecraft/warzoneduels/app/PlaytestRegressionTest.java:[16,27] sun.misc.Unsafe is internal proprietary API and may be removed in a future release
+[WARNING] /C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/src/test/java/dev/minecraft/warzoneduels/app/PlaytestRegressionTest.java:[18,47] sun.misc.Unsafe is internal proprietary API and may be removed in a future release
+[INFO] 
+[INFO] --- surefire:3.5.2:test (default-test) @ WarzoneDuels ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running dev.minecraft.warzoneduels.adapter.bukkit.command.DuelPartyCommandContractTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.034 s -- in dev.minecraft.warzoneduels.adapter.bukkit.command.DuelPartyCommandContractTest
+[INFO] Running dev.minecraft.warzoneduels.adapter.bukkit.persistence.DuelAnalyticsTransactionTest
+Sep 18, 2026 10:45:49 AM dev.minecraft.warzoneduels.adapter.bukkit.persistence.DuelAnalyticsStore insert
+WARNING: Failed to persist duel record: Unique index or primary key violation: "PUBLIC.PRIMARY_KEY_78 ON PUBLIC.DUEL_RECORDS(REFERENCE) VALUES ( /* 1 */ 'existing' )"; SQL statement:
+INSERT INTO duel_records (
+    reference, started_at, ended_at, duration_ms,
+    player_one_id, player_one_name, player_two_id, player_two_name,
+    winner_id, winner_name, loser_id, loser_name,
+    map_id, map_name, ruleset, item_rules,
+    end_reason, counted_as_match, spectator_count, wager,
+    match_type, team_size
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) [23505-224]
+Sep 18, 2026 10:45:49 AM dev.minecraft.warzoneduels.adapter.bukkit.persistence.DuelAnalyticsStore insert
+WARNING: Failed to persist duel record: Unique index or primary key violation: "PUBLIC.PRIMARY_KEY_7 ON PUBLIC.DUEL_RECORD_PARTICIPANTS(DUEL_REFERENCE, PLAYER_ID) VALUES ( /* key:1 */ 'failed', 'b2e62c8f-7fe6-430b-bcd3-21c677cbbec4')"; SQL statement:
+INSERT INTO duel_record_participants (
+    duel_reference, player_id, player_name, team_index, winner
+) VALUES (?, ?, ?, ?, ?) [23505-224]
+Sep 18, 2026 10:45:49 AM dev.minecraft.warzoneduels.adapter.bukkit.persistence.DuelAnalyticsStore insert
+WARNING: Failed to persist duel record: Unique index or primary key violation: "PUBLIC.PRIMARY_KEY_7 ON PUBLIC.DUEL_RECORD_PARTICIPANTS(DUEL_REFERENCE, PLAYER_ID) VALUES ( /* key:3 */ 'failed', '22bcd0a3-92a8-407f-aec4-d203435651eb')"; SQL statement:
+INSERT INTO duel_record_participants (
+    duel_reference, player_id, player_name, team_index, winner
+) VALUES (?, ?, ?, ?, ?) [23505-224]
+Sep 18, 2026 10:45:49 AM dev.minecraft.warzoneduels.adapter.bukkit.persistence.DuelAnalyticsStore insert
+WARNING: Failed to persist duel record: Unique index or primary key violation: "PUBLIC.PRIMARY_KEY_7 ON PUBLIC.DUEL_RECORD_PARTICIPANTS(DUEL_REFERENCE, PLAYER_ID) VALUES ( /* key:1 */ 'retry', '5cf32ec9-840c-42bc-a5f2-84e3b09e82ce')"; SQL statement:
+INSERT INTO duel_record_participants (
+    duel_reference, player_id, player_name, team_index, winner
+) VALUES (?, ?, ?, ?, ?) [23505-224]
+Sep 18, 2026 10:45:49 AM dev.minecraft.warzoneduels.adapter.bukkit.persistence.DuelAnalyticsStore insert
+WARNING: Failed to persist duel record: injected commit failure
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.272 s -- in dev.minecraft.warzoneduels.adapter.bukkit.persistence.DuelAnalyticsTransactionTest
+[INFO] Running dev.minecraft.warzoneduels.adapter.bukkit.persistence.RuntimeStateTeamSchemaContractTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in dev.minecraft.warzoneduels.adapter.bukkit.persistence.RuntimeStateTeamSchemaContractTest
+[INFO] Running dev.minecraft.warzoneduels.adapter.bukkit.persistence.SpectatorSessionStoreTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.087 s -- in dev.minecraft.warzoneduels.adapter.bukkit.persistence.SpectatorSessionStoreTest
+[INFO] Running dev.minecraft.warzoneduels.adapter.plan.PlanApiBinaryCompatibilityTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in dev.minecraft.warzoneduels.adapter.plan.PlanApiBinaryCompatibilityTest
+[INFO] Running dev.minecraft.warzoneduels.app.DuelChallengeServiceTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.013 s -- in dev.minecraft.warzoneduels.app.DuelChallengeServiceTest
+[INFO] Running dev.minecraft.warzoneduels.app.DuelPartyServiceTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in dev.minecraft.warzoneduels.app.DuelPartyServiceTest
+[INFO] Running dev.minecraft.warzoneduels.app.PartyChallengeLiveFlowContractTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in dev.minecraft.warzoneduels.app.PartyChallengeLiveFlowContractTest
+[INFO] Running dev.minecraft.warzoneduels.app.PlaytestRegressionTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.030 s -- in dev.minecraft.warzoneduels.app.PlaytestRegressionTest
+[INFO] Running dev.minecraft.warzoneduels.app.SpectatorInventoryRestorerTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in dev.minecraft.warzoneduels.app.SpectatorInventoryRestorerTest
+[INFO] Running dev.minecraft.warzoneduels.app.TeamCombatIntegrationContractTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in dev.minecraft.warzoneduels.app.TeamCombatIntegrationContractTest
+[INFO] Running dev.minecraft.warzoneduels.app.TeamMatchPreparationContractTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in dev.minecraft.warzoneduels.app.TeamMatchPreparationContractTest
+[INFO] Running dev.minecraft.warzoneduels.domain.ActiveDuelTeamTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in dev.minecraft.warzoneduels.domain.ActiveDuelTeamTest
+[INFO] Running dev.minecraft.warzoneduels.domain.ArenaTeamSpawnTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in dev.minecraft.warzoneduels.domain.ArenaTeamSpawnTest
+[INFO] Running dev.minecraft.warzoneduels.domain.DuelChallengeTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in dev.minecraft.warzoneduels.domain.DuelChallengeTest
+[INFO] Running dev.minecraft.warzoneduels.domain.DuelDurationPolicyTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in dev.minecraft.warzoneduels.domain.DuelDurationPolicyTest
+[INFO] Running dev.minecraft.warzoneduels.domain.DuelPartyTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in dev.minecraft.warzoneduels.domain.DuelPartyTest
+[INFO] Running dev.minecraft.warzoneduels.domain.ExplosiveTeamCombatPolicyTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 s -- in dev.minecraft.warzoneduels.domain.ExplosiveTeamCombatPolicyTest
+[INFO] Running dev.minecraft.warzoneduels.domain.MatchTeamTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in dev.minecraft.warzoneduels.domain.MatchTeamTest
+[INFO] Running dev.minecraft.warzoneduels.domain.TeamMatchPolicyTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in dev.minecraft.warzoneduels.domain.TeamMatchPolicyTest
+[INFO] Running dev.minecraft.warzoneduels.domain.TeamOutcomePolicyTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in dev.minecraft.warzoneduels.domain.TeamOutcomePolicyTest
+[INFO] Running dev.minecraft.warzoneduels.domain.TeamSpoilsPolicyTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in dev.minecraft.warzoneduels.domain.TeamSpoilsPolicyTest
+[INFO] Running dev.minecraft.warzoneduels.domain.TypedTeleportAllowanceTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in dev.minecraft.warzoneduels.domain.TypedTeleportAllowanceTest
+[INFO] Running dev.minecraft.warzoneduels.integration.OptionalIntegrationBinaryIsolationTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 s -- in dev.minecraft.warzoneduels.integration.OptionalIntegrationBinaryIsolationTest
+[INFO] Running dev.minecraft.warzoneduels.permission.PermissionNamespaceTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.018 s -- in dev.minecraft.warzoneduels.permission.PermissionNamespaceTest
+[INFO] Running dev.minecraft.warzoneduels.permission.PermissionParentsTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.015 s -- in dev.minecraft.warzoneduels.permission.PermissionParentsTest
+[INFO] Running dev.minecraft.warzoneduels.permission.PermissionPolicyTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in dev.minecraft.warzoneduels.permission.PermissionPolicyTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 70, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- jar:3.4.1:jar (default-jar) @ WarzoneDuels ---
+[INFO] Building jar: C:\Users\p_ric\Documents\Codex\2026-09-17\get-started-on-the-warzoneduels-update\target\WarzoneDuels-1.0.3.jar
+[INFO] 
+[INFO] --- shade:3.5.1:shade (default) @ WarzoneDuels ---
+[INFO] Including com.h2database:h2:jar:2.2.224 in the shaded jar.
+[WARNING] WarzoneDuels-1.0.3.jar, h2-2.2.224.jar define 1 overlapping resource: 
+[WARNING]   - META-INF/MANIFEST.MF
+[WARNING] maven-shade-plugin has detected that some files are
+[WARNING] present in two or more JARs. When this happens, only one
+[WARNING] single version of the file is copied to the uber jar.
+[WARNING] Usually this is not harmful and you can skip these warnings,
+[WARNING] otherwise try to manually exclude artifacts based on
+[WARNING] mvn dependency:tree -Ddetail=true and the above output.
+[WARNING] See https://maven.apache.org/plugins/maven-shade-plugin/
+[INFO] Replacing original artifact with shaded artifact.
+[INFO] Replacing C:\Users\p_ric\Documents\Codex\2026-09-17\get-started-on-the-warzoneduels-update\target\WarzoneDuels-1.0.3.jar with C:\Users\p_ric\Documents\Codex\2026-09-17\get-started-on-the-warzoneduels-update\target\WarzoneDuels-1.0.3-shaded.jar
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  5.731 s
+[INFO] Finished at: 2026-09-18T10:45:50-04:00
+[INFO] ------------------------------------------------------------------------

@@ -1,0 +1,69 @@
+name: WarzoneDuels verification
+on:
+  push:
+    branches-ignore: ['test-jars-*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: WarzoneDuels-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify exact checkout
+        env:
+          EXPECTED: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED"
+      - uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Validate SPEAR requirements and tooling
+        run: |
+          node tools/spear/ears.mjs docs/requirements.md
+          node --test tools/spear/*.test.mjs
+      - name: Paper 26.3 compatibility verification
+        id: compatibility
+        run: mvn -B -ntp -Ppaper-26.3 clean verify
+      - name: Preserve Paper 26.3 test reports
+        if: always() && steps.compatibility.outcome != 'skipped'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: WarzoneDuels-paper-26.3-reports-${{ github.event.pull_request.head.sha || github.sha }}
+          path: target/surefire-reports/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Stable Paper 26.2 artifact verification
+        id: stable
+        run: mvn -B -ntp clean verify
+      - name: Upload stable Paper 26.2 test reports
+        if: always() && steps.stable.outcome != 'skipped'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: WarzoneDuels-test-reports-${{ github.event.pull_request.head.sha || github.sha }}
+          path: target/surefire-reports/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Record testing artifact provenance
+        run: |
+          git rev-parse HEAD > target/source-commit.txt
+          sha256sum target/WarzoneDuels-*.jar > target/SHA256SUMS
+      - name: Upload verified testing artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: WarzoneDuels-test-jar-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            target/WarzoneDuels-*.jar
+            target/source-commit.txt
+            target/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 14

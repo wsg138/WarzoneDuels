@@ -7,10 +7,10 @@ import dev.minecraft.warzoneduels.domain.DuelEndReason;
 import dev.minecraft.warzoneduels.domain.DuelSettings;
 import dev.minecraft.warzoneduels.domain.MatchParticipant;
 import dev.minecraft.warzoneduels.domain.analytics.DuelRecord;
+import dev.minecraft.warzoneduels.domain.analytics.DuelRecordParticipant;
 
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -165,6 +165,15 @@ public final class DuelAnalyticsService {
         long endedAt = System.currentTimeMillis();
         long duration = Math.max(0L, endedAt - duel.startedAtEpochMs());
         DuelOutcome outcome = outcomeFor(duel, winnerId);
+        List<DuelRecordParticipant> participants = new ArrayList<>();
+        for (MatchParticipant participant : duel.teamOne().participants()) {
+            participants.add(new DuelRecordParticipant(participant.playerId(), participant.name(), 1,
+                winnerId != null && duel.teamOne().contains(winnerId)));
+        }
+        for (MatchParticipant participant : duel.teamTwo().participants()) {
+            participants.add(new DuelRecordParticipant(participant.playerId(), participant.name(), 2,
+                winnerId != null && duel.teamTwo().contains(winnerId)));
+        }
 
         String reference = Long.toString(duel.startedAtEpochMs(), 36).toUpperCase(Locale.ROOT);
         return new DuelRecord(
@@ -187,7 +196,10 @@ public final class DuelAnalyticsService {
             reason,
             countsAsMatch(reason),
             0,
-            settings.getWager()
+            settings.getWager(),
+            duel.matchType(),
+            duel.teamOne().size(),
+            participants
         );
     }
 
@@ -196,7 +208,9 @@ public final class DuelAnalyticsService {
             return DuelOutcome.empty();
         }
         MatchParticipant winner = duel.participant(winnerId);
-        MatchParticipant loser = duel.other(winnerId);
+        MatchParticipant loser = duel.opposingTeam(winnerId) == null
+            ? null
+            : duel.opposingTeam(winnerId).participants().get(0);
         return new DuelOutcome(
             winner == null ? null : winner.name(),
             loser == null ? null : loser.playerId(),
@@ -217,6 +231,21 @@ public final class DuelAnalyticsService {
     }
 
     private String opponentName(DuelRecord record, UUID playerId) {
+        if (!record.participants().isEmpty()) {
+            DuelRecordParticipant participant = record.participants().stream()
+                .filter(candidate -> candidate.playerId().equals(playerId))
+                .findFirst()
+                .orElse(null);
+            if (participant == null) {
+                return null;
+            }
+            return record.participants().stream()
+                .filter(candidate -> candidate.teamIndex() != participant.teamIndex())
+                .map(DuelRecordParticipant::playerName)
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .findFirst()
+                .orElse(null);
+        }
         if (record.playerOneId().equals(playerId)) {
             return record.playerTwoName();
         }

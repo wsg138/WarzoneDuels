@@ -1,5 +1,7 @@
 package dev.minecraft.warzoneduels;
 
+import org.bukkit.plugin.ServicePriority;
+
 import dev.minecraft.warzoneduels.adapter.bukkit.command.DuelCommand;
 import dev.minecraft.warzoneduels.adapter.bukkit.command.StatsCommand;
 import dev.minecraft.warzoneduels.adapter.bukkit.gui.DuelGuiListener;
@@ -11,6 +13,12 @@ import dev.minecraft.warzoneduels.adapter.bukkit.persistence.ArenaMapSnapshotSto
 import dev.minecraft.warzoneduels.adapter.bukkit.persistence.DuelAnalyticsStore;
 import dev.minecraft.warzoneduels.adapter.bukkit.persistence.LoadoutArchiveStore;
 import dev.minecraft.warzoneduels.adapter.bukkit.persistence.PlayerStatsStore;
+import dev.minecraft.warzoneduels.adapter.bukkit.persistence.YamlDuelCooldownStore;
+import dev.minecraft.warzoneduels.app.DuelCooldownService;
+import dev.minecraft.warzoneduels.app.DuelBlockApiService;
+import dev.minecraft.warzoneduels.app.DuelBlockService;
+import dev.minecraft.warzoneduels.api.DuelBlockApi;
+import dev.minecraft.warzoneduels.adapter.bukkit.persistence.YamlDuelBlockStore;
 import dev.minecraft.warzoneduels.adapter.bukkit.persistence.RuntimeStateStore;
 import dev.minecraft.warzoneduels.adapter.bukkit.persistence.SpoilsStore;
 import dev.minecraft.warzoneduels.adapter.bukkit.persistence.SpectatorSessionStore;
@@ -27,6 +35,8 @@ import dev.minecraft.warzoneduels.app.ArenaMapService;
 import dev.minecraft.warzoneduels.app.ArenaTerrainService;
 import dev.minecraft.warzoneduels.app.DuelAnalyticsService;
 import dev.minecraft.warzoneduels.app.DuelService;
+import dev.minecraft.warzoneduels.app.DuelPartyService;
+import dev.minecraft.warzoneduels.app.DuelChallengeService;
 import dev.minecraft.warzoneduels.app.SpoilsService;
 import dev.minecraft.warzoneduels.app.StatsService;
 import dev.minecraft.warzoneduels.port.EconomyPort;
@@ -40,6 +50,8 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public class WarzoneDuelsPlugin extends JavaPlugin {
     private DuelService activeDuelService;
+    private DuelPartyService activePartyService;
+    private DuelChallengeService activeChallengeService;
     private SpoilsService activeSpoilsService;
     private ArenaTerrainService activeArenaTerrainService;
     private CombatTagPort combatTagPort;
@@ -73,6 +85,20 @@ public class WarzoneDuelsPlugin extends JavaPlugin {
         analyticsService.enable();
         this.headCache = new PlayerHeadCache(this);
         headCache.load();
+        long partyInviteLifetimeMillis = Math.max(
+            5L,
+            getConfig().getLong("settings.party-invite-expire-seconds", 60L)
+        ) * 1000L;
+        this.activePartyService = new DuelPartyService(partyInviteLifetimeMillis, java.util.UUID::randomUUID);
+        long partyChallengeLifetimeMillis = Math.max(
+            10L,
+            getConfig().getLong("settings.party-challenge-expire-seconds", 60L)
+        ) * 1000L;
+        this.activeChallengeService = new DuelChallengeService(
+            activePartyService,
+            partyChallengeLifetimeMillis,
+            java.util.UUID::randomUUID
+        );
 
         this.activeDuelService = new DuelService(
             this,
@@ -87,8 +113,19 @@ public class WarzoneDuelsPlugin extends JavaPlugin {
             analyticsService,
             arenaMapService,
             activeArenaTerrainService,
-            new NoOpCombatTagPort()
+            new NoOpCombatTagPort(),
+            activePartyService,
+            activeChallengeService,
+            new DuelCooldownService(new YamlDuelCooldownStore(getDataFolder().toPath().resolve("duel-cooldowns.yml")),
+                System::currentTimeMillis, message -> getLogger().warning(message))
         );
+        // Personal duel blocks (REQ-041), shared with other plugins through DuelBlockApi.
+        DuelBlockService blockService = new DuelBlockService(
+            new YamlDuelBlockStore(getDataFolder().toPath().resolve("duel-blocks.yml")), message -> getLogger().warning(message));
+        blockService.enable();
+        activeDuelService.setBlockService(blockService);
+        getServer().getServicesManager().register(DuelBlockApi.class, new DuelBlockApiService(blockService, Bukkit::isPrimaryThread),
+            this, ServicePriority.Normal);
         this.combatTagPort = new CombatLogXCombatTagPort(this, activeDuelService);
         activeDuelService.setCombatTagPort(combatTagPort);
         combatTagPort.enable();
@@ -113,13 +150,13 @@ public class WarzoneDuelsPlugin extends JavaPlugin {
 
         PluginCommand duelCommand = getCommand("duel");
         if (duelCommand != null) {
-            DuelCommand command = new DuelCommand(activeDuelService, activeSpoilsService);
+            DuelCommand command = new DuelCommand(activeDuelService, activeSpoilsService, activePartyService);
             duelCommand.setExecutor(command);
             duelCommand.setTabCompleter(command);
         }
         PluginCommand surrenderCommand = getCommand("surrender");
         if (surrenderCommand != null) {
-            DuelCommand command = new DuelCommand(activeDuelService, activeSpoilsService);
+            DuelCommand command = new DuelCommand(activeDuelService, activeSpoilsService, activePartyService);
             surrenderCommand.setExecutor(command);
             surrenderCommand.setTabCompleter(command);
         }
@@ -139,6 +176,7 @@ public class WarzoneDuelsPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        getServer().getServicesManager().unregisterAll(this);
         if (activeDuelService != null) {
             activeDuelService.disable(isServerStopping());
         }
@@ -168,6 +206,10 @@ public class WarzoneDuelsPlugin extends JavaPlugin {
 
     public SpoilsService spoilsService() {
         return activeSpoilsService;
+    }
+
+    public StatsService statsService() {
+        return statsService;
     }
 
     public ArenaTerrainService arenaTerrainService() {

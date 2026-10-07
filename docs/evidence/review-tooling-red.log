@@ -1,0 +1,145 @@
+✖ missing clauses are rejected at the next header and EOF (2.9832ms)
+✔ blank responses remain rejected and valid patterns remain accepted (0.3233ms)
+✖ malformed JSON reports an actionable error without changing the file (47.2885ms)
+✖ non-object state is rejected clearly (40.2482ms)
+✖ failed rename preserves state and removes its temporary file (42.606ms)
+✖ successful transitions rename within the same directory and retain gates (47.9516ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 1
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 261.3004
+
+✖ failing tests:
+
+test at tools\spear\tooling.test.mjs:12:1
+✖ missing clauses are rejected at the next header and EOF (2.9832ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  true !== false
+  
+      at TestContext.<anonymous> (file:///C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/tools/spear/tooling.test.mjs:14:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.start (node:internal/test_runner/test:1242:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: false,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tools\spear\tooling.test.mjs:34:1
+✖ malformed JSON reports an actionable error without changing the file (47.2885ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /SPEAR state file is not valid JSON/. Input:
+  
+  '<anonymous_script>:1\r\n' +
+    '{broken\r\n' +
+    ' ^\r\n' +
+    '\r\n' +
+    "SyntaxError: Expected property name or '}' in JSON at position 1 (line 1 column 2)\r\n" +
+    '    at JSON.parse (<anonymous>)\r\n' +
+    '    at file:///C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/tools/spear/state.mjs:5:42\r\n' +
+    '    at ModuleJob.run (node:internal/modules/esm/module_job:439:25)\r\n' +
+    '    at async node:internal/modules/esm/loader:643:26\r\n' +
+    '    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)\r\n' +
+    '\r\n' +
+    'Node.js v24.19.0\r\n'
+  
+      at TestContext.<anonymous> (file:///C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/tools/spear/tooling.test.mjs:38:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: "<anonymous_script>:1\r\n{broken\r\n ^\r\n\r\nSyntaxError: Expected property name or '}' in JSON at position 1 (line 1 column 2)\r\n    at JSON.parse (<anonymous>)\r\n    at file:///C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/tools/spear/state.mjs:5:42\r\n    at ModuleJob.run (node:internal/modules/esm/module_job:439:25)\r\n    at async node:internal/modules/esm/loader:643:26\r\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)\r\n\r\nNode.js v24.19.0\r\n",
+    expected: /SPEAR state file is not valid JSON/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tools\spear\tooling.test.mjs:42:1
+✖ non-object state is rejected clearly (40.2482ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /SPEAR state file must contain a JSON object/. Input:
+  
+  'file:///C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/tools/spear/state.mjs:16\r\n' +
+    "  if(state.phase!==args[0]) throw Error('spear requires phase='+args[0]+'; current phase='+state.phase);\r\n" +
+    '           ^\r\n' +
+    '\r\n' +
+    "TypeError: Cannot read properties of null (reading 'phase')\r\n" +
+    '    at file:///C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/tools/spear/state.mjs:16:12\r\n' +
+    '    at ModuleJob.run (node:internal/modules/esm/module_job:439:25)\r\n' +
+    '    at async node:internal/modules/esm/loader:643:26\r\n' +
+    '    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)\r\n' +
+    '\r\n' +
+    'Node.js v24.19.0\r\n'
+  
+      at TestContext.<anonymous> (file:///C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/tools/spear/tooling.test.mjs:47:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: "file:///C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/tools/spear/state.mjs:16\r\n  if(state.phase!==args[0]) throw Error('spear requires phase='+args[0]+'; current phase='+state.phase);\r\n           ^\r\n\r\nTypeError: Cannot read properties of null (reading 'phase')\r\n    at file:///C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/tools/spear/state.mjs:16:12\r\n    at ModuleJob.run (node:internal/modules/esm/module_job:439:25)\r\n    at async node:internal/modules/esm/loader:643:26\r\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)\r\n\r\nNode.js v24.19.0\r\n",
+    expected: /SPEAR state file must contain a JSON object/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tools\spear\tooling.test.mjs:52:1
+✖ failed rename preserves state and removes its temporary file (42.606ms)
+  AssertionError [ERR_ASSERTION]: Expected "actual" to be strictly unequal to: 0
+      at TestContext.<anonymous> (file:///C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/tools/spear/tooling.test.mjs:60:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at tools\spear\tooling.test.mjs:66:1
+✖ successful transitions rename within the same directory and retain gates (47.9516ms)
+  AssertionError [ERR_ASSERTION]: file:///C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/[eval1]:10
+      if (!renamed) throw Error('rename was not used');
+                          ^
+  
+  Error: rename was not used
+      at file:///C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/[eval1]:10:25
+  
+  Node.js v24.19.0
+  
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (file:///C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/tools/spear/tooling.test.mjs:79:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

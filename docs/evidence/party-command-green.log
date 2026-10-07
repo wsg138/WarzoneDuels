@@ -1,0 +1,54 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ---------------------< dev.minecraft:WarzoneDuels >---------------------
+[INFO] Building WarzoneDuels 1.0.1
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ WarzoneDuels ---
+[INFO] Copying 3 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ WarzoneDuels ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 87 source files with javac [debug target 21] to target\classes
+[WARNING] location of system modules is not set in conjunction with -source 21
+  not setting the location of system modules may lead to class files that cannot run on JDK 21
+    --release 21 is recommended instead of -source 21 -target 21 because it sets the location of system modules automatically
+[WARNING] /C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/src/main/java/dev/minecraft/warzoneduels/adapter/bukkit/listener/DuelListener.java:[781,46] CHORUS_FRUIT in org.bukkit.event.player.PlayerTeleportEvent.TeleportCause has been deprecated and marked for removal
+[WARNING] /C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/src/main/java/dev/minecraft/warzoneduels/adapter/bukkit/listener/DuelListener.java:[787,60] CHORUS_FRUIT in org.bukkit.event.player.PlayerTeleportEvent.TeleportCause has been deprecated and marked for removal
+[INFO] /C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/src/main/java/dev/minecraft/warzoneduels/app/DuelService.java: Some input files use or override a deprecated API.
+[INFO] /C:/Users/p_ric/Documents/Codex/2026-09-17/get-started-on-the-warzoneduels-update/src/main/java/dev/minecraft/warzoneduels/app/DuelService.java: Recompile with -Xlint:deprecation for details.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ WarzoneDuels ---
+[INFO] skip non existing resourceDirectory C:\Users\p_ric\Documents\Codex\2026-09-17\get-started-on-the-warzoneduels-update\src\test\resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ WarzoneDuels ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 14 source files with javac [debug target 21] to target\test-classes
+[WARNING] location of system modules is not set in conjunction with -source 21
+  not setting the location of system modules may lead to class files that cannot run on JDK 21
+    --release 21 is recommended instead of -source 21 -target 21 because it sets the location of system modules automatically
+[INFO] 
+[INFO] --- surefire:3.5.2:test (default-test) @ WarzoneDuels ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running dev.minecraft.warzoneduels.adapter.bukkit.command.DuelPartyCommandContractTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.037 s -- in dev.minecraft.warzoneduels.adapter.bukkit.command.DuelPartyCommandContractTest
+[INFO] Running dev.minecraft.warzoneduels.permission.PermissionParentsTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.057 s -- in dev.minecraft.warzoneduels.permission.PermissionParentsTest
+[INFO] Running dev.minecraft.warzoneduels.permission.PermissionPolicyTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in dev.minecraft.warzoneduels.permission.PermissionPolicyTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  9.453 s
+[INFO] Finished at: 2026-09-17T11:28:35-04:00
+[INFO] ------------------------------------------------------------------------

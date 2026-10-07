@@ -4,6 +4,9 @@
 # Duel watchers use a durable Adventure-mode pseudo-spectator session centered on the configured spectator spawn.
 
 messages:
+  duel-cooldown: "&c{player} must wait {seconds}s before another duel."
+  repeat-opponent-cooldown: "&c{player} and {opponent} must wait {seconds}s before facing each other again."
+  cooldown-unavailable: "&cDuels are unavailable while cooldown history needs administrator attention."
   prefix: "&6[Duel]&r "
   no-permission: "&cYou do not have permission."
   no-arena: "&cDuel arena is not configured."
@@ -60,6 +63,7 @@ messages:
   combat-item-blocked: "&cThat item is disabled for this duel."
   disconnect-grace: "&e{player} disconnected. They have &6{seconds}s &eto rejoin before they lose."
   disconnect-loss: "&c{player} failed to rejoin in time and forfeited the duel."
+  player-eliminated: "&e{player} was eliminated. The team duel continues."
   duel-countdown: "&eDuel begins in &6{seconds}&e..."
   duel-released: "&aFight!"
   rejoined-duel: "&aYou rejoined your duel. You were returned to your arena spawn."
@@ -83,6 +87,13 @@ arena:
   spawn1: "-140.5,172,-299.5"
   spawn2: "-140.5,172,-339.5"
 
+  # Additional party-member positions. If omitted, deterministic +/-2 X offsets from spawn1/spawn2 are used.
+  # team1-spawn2: "-138.5,172,-299.5"
+  # team1-spawn3: "-142.5,172,-299.5"
+  # team2-spawn2: "-138.5,172,-339.5"
+  # team2-spawn3: "-142.5,172,-339.5"
+  # All configured or derived combatant positions must remain inside pos1/pos2.
+
   # Center point for the controlled pseudo-spectator boundary.
   spectator: "-140,182,-319"
 
@@ -91,11 +102,29 @@ arena:
   exit: "0,80,0"
 
 settings:
+  # Per-player wait after a finished duel; applies to every party member. 0 disables.
+  duel-cooldown-seconds: 300
+  # Wait before ANY opposing player pair can rematch, even with different party leaders.
+  # Also limits challenge-sent advancement credit for repeated/expired requests. 0 disables.
+  repeat-opponent-cooldown-seconds: 86400
+
+  # Independent switches for new party duels. 1v1 is always available.
+  # /duel mode <2v2|3v3> <enable|disable> saves changes immediately.
+  duel-modes:
+    2v2-enabled: true
+    3v3-enabled: true
+
   # Pending duel request lifetime in seconds.
   request-expire-seconds: 120
 
+  # Pending Duel Party invitation lifetime in seconds.
+  party-invite-expire-seconds: 60
+  party-challenge-expire-seconds: 60
+
   # Seconds players are frozen after teleport before the fight starts.
   start-countdown-seconds: 5
+  # 0 keeps death duels unlimited. Positive values end unfinished duels as a draw after combat is released.
+  duel-time-limit-seconds: 0
 
   # Seconds the winner remains in the arena after a kill before being sent to spawn.
   victory-moment-seconds: 6

@@ -266,6 +266,27 @@ public final class DuelSettings {
             + ", Ender Chests: " + onOff(allowEnderChests);
     }
 
+    public boolean hasCustomAdvancementRules() {
+        return placeBreakMode != PlaceBreakMode.NONE
+            || !"flat_arena".equalsIgnoreCase(mapId)
+            || allowCrystalsAnchors
+            || allowExplosiveMinecarts
+            || allowOtherExplosives
+            || !allowEnderPearls
+            || enderPearlCooldownSeconds > 0
+            || !allowWindCharges
+            || windChargeCooldownSeconds > 0
+            || !allowMaces
+            || !allowChorusFruit
+            || !allowSpears
+            || !allowElytras
+            || allowEnderChests;
+    }
+
+    public boolean isRestrictedMobilityRuleset() {
+        return !allowEnderPearls && !allowWindCharges;
+    }
+
     public DuelSettings copy() {
         DuelSettings copy = new DuelSettings();
         copy.placeBreakMode = placeBreakMode;

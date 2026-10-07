@@ -4,12 +4,14 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
 
+import java.util.List;
+
 public final class ArenaDefinition {
     private final String arenaWorldName;
     private final Location firstCorner;
     private final Location secondCorner;
-    private final Location firstSpawn;
-    private final Location secondSpawn;
+    private final List<Location> firstTeamSpawns;
+    private final List<Location> secondTeamSpawns;
     private final Location spectatorLocation;
     private final Location exitLocation;
 
@@ -22,11 +24,31 @@ public final class ArenaDefinition {
         Location spectator,
         Location exit
     ) {
+        this(
+            worldName,
+            pos1,
+            pos2,
+            fallbackSpawnGroup(spawn1),
+            fallbackSpawnGroup(spawn2),
+            spectator,
+            exit
+        );
+    }
+
+    public ArenaDefinition(
+        String worldName,
+        Location pos1,
+        Location pos2,
+        List<Location> teamOneSpawns,
+        List<Location> teamTwoSpawns,
+        Location spectator,
+        Location exit
+    ) {
         this.arenaWorldName = worldName;
         this.firstCorner = pos1.clone();
         this.secondCorner = pos2.clone();
-        this.firstSpawn = spawn1.clone();
-        this.secondSpawn = spawn2.clone();
+        this.firstTeamSpawns = copySpawnGroup(teamOneSpawns);
+        this.secondTeamSpawns = copySpawnGroup(teamTwoSpawns);
         this.spectatorLocation = spectator.clone();
         this.exitLocation = exit.clone();
     }
@@ -48,11 +70,22 @@ public final class ArenaDefinition {
     }
 
     public Location spawn1() {
-        return firstSpawn.clone();
+        return teamSpawn(0, 0);
     }
 
     public Location spawn2() {
-        return secondSpawn.clone();
+        return teamSpawn(1, 0);
+    }
+
+    public Location teamSpawn(int teamIndex, int rosterSlot) {
+        if (teamIndex < 0 || teamIndex > 1) {
+            throw new IllegalArgumentException("Team index must be 0 or 1.");
+        }
+        if (rosterSlot < 0 || rosterSlot >= MatchTeam.MAX_SIZE) {
+            throw new IllegalArgumentException("Roster slot must be between 0 and " + (MatchTeam.MAX_SIZE - 1) + ".");
+        }
+        List<Location> spawns = teamIndex == 0 ? firstTeamSpawns : secondTeamSpawns;
+        return spawns.get(rosterSlot).clone();
     }
 
     public Location spectator() {
@@ -64,7 +97,12 @@ public final class ArenaDefinition {
     }
 
     public boolean isReady() {
-        return world() != null;
+        return world() != null && hasValidTeamSpawns();
+    }
+
+    public boolean hasValidTeamSpawns() {
+        return java.util.stream.Stream.concat(firstTeamSpawns.stream(), secondTeamSpawns.stream())
+            .allMatch(this::contains);
     }
 
     public boolean contains(Location location) {
@@ -74,6 +112,10 @@ public final class ArenaDefinition {
         if (!location.getWorld().getName().equalsIgnoreCase(arenaWorldName)) {
             return false;
         }
+        return withinBounds(location);
+    }
+
+    private boolean withinBounds(Location location) {
         int minX = Math.min(firstCorner.getBlockX(), secondCorner.getBlockX());
         int maxX = Math.max(firstCorner.getBlockX(), secondCorner.getBlockX());
         int minY = Math.min(firstCorner.getBlockY(), secondCorner.getBlockY());
@@ -84,5 +126,23 @@ public final class ArenaDefinition {
         int y = location.getBlockY();
         int z = location.getBlockZ();
         return x >= minX && x <= maxX && y >= minY && y <= maxY && z >= minZ && z <= maxZ;
+    }
+
+    private static List<Location> copySpawnGroup(List<Location> spawns) {
+        if (spawns == null || spawns.size() != MatchTeam.MAX_SIZE || spawns.stream().anyMatch(java.util.Objects::isNull)) {
+            throw new IllegalArgumentException("Each arena team requires exactly " + MatchTeam.MAX_SIZE + " spawn locations.");
+        }
+        return spawns.stream().map(Location::clone).toList();
+    }
+
+    private static List<Location> fallbackSpawnGroup(Location primary) {
+        if (primary == null) {
+            throw new IllegalArgumentException("Primary spawn cannot be null.");
+        }
+        return List.of(
+            primary.clone(),
+            primary.clone().add(2D, 0D, 0D),
+            primary.clone().add(-2D, 0D, 0D)
+        );
     }
 }

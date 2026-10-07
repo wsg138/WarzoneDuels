@@ -1,0 +1,10 @@
+[ERROR] Tests run: 6, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 0.109 s <<< FAILURE! -- in dev.minecraft.warzoneduels.app.DuelBlockServiceTest
+[ERROR] dev.minecraft.warzoneduels.app.DuelBlockServiceTest.aFailedWriteFailsOnlyThatChangeAndKeepsDuelsRunning -- Time elapsed: 0.014 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: One failed save must not pause every duel ==> expected: <true> but was: <false>
+[ERROR] Tests run: 3, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 0.075 s <<< FAILURE! -- in dev.minecraft.warzoneduels.app.DuelBlockWiringTest
+[ERROR] dev.minecraft.warzoneduels.app.DuelBlockWiringTest.acceptanceReloadAndSuggestionsRespectBlocks -- Time elapsed: 0.004 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: Accepting a request re-checks blocks ==> expected: <true> but was: <false>
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.007 s -- in dev.minecraft.warzoneduels.domain.DuelBlockListTest
+[ERROR]   DuelBlockServiceTest.aFailedWriteFailsOnlyThatChangeAndKeepsDuelsRunning:67 One failed save must not pause every duel ==> expected: <true> but was: <false>
+[ERROR]   DuelBlockWiringTest.acceptanceReloadAndSuggestionsRespectBlocks:41 Accepting a request re-checks blocks ==> expected: <true> but was: <false>
+[ERROR] Tests run: 12, Failures: 2, Errors: 0, Skipped: 0
