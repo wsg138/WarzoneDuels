@@ -104,6 +104,23 @@ public final class DuelAnalyticsStore {
         }
     }
 
+    public synchronized List<Map<String, Object>> websiteWeeklyWins(long start, long end) {
+        if (connection == null) {
+            throw new IllegalStateException("Duel analytics unavailable");
+        }
+        try {
+            return WeeklyWinsQuery.topThree(connection, start, end);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Weekly duel wins unavailable", ex);
+        }
+    }
+
+    public synchronized Map<String,Object> websiteWeeklyResults(long start,long end) {
+        if(connection==null)throw new IllegalStateException("Duel analytics unavailable");
+        try { return WeeklyWinsQuery.snapshot(connection,start,end); }
+        catch(SQLException ex) { throw new IllegalStateException("Weekly duel results unavailable",ex); }
+    }
+
     public synchronized long countAll() {
         if (connection == null) {
             return 0L;

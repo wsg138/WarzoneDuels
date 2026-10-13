@@ -190,6 +190,20 @@ public class WarzoneDuelsPlugin extends JavaPlugin {
         }
     }
 
+    /** Read-only website bridge. Invoke asynchronously; results contain public winner identity/count only. */
+    public java.util.List<java.util.Map<String, Object>> websiteWeeklyWins(long start, long end) {
+        if (analyticsService == null) {
+            throw new IllegalStateException("Duel analytics unavailable");
+        }
+        return analyticsService.websiteWeeklyWins(start, end);
+    }
+
+    /** Bounded complete weekly public results; invoke off the game thread. */
+    public java.util.Map<String,Object> websiteWeeklyResults(long start,long end) {
+        if(analyticsService==null)throw new IllegalStateException("Duel analytics unavailable");
+        return analyticsService.websiteWeeklyResults(start,end);
+    }
+
     private boolean isServerStopping() {
         try {
             return Bukkit.getServer().isStopping();
