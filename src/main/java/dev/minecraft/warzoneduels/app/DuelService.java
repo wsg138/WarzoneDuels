@@ -1134,6 +1134,13 @@ public final class DuelService {
         return activeSettingsAllowRestrictedExplosive(material);
     }
 
+    public boolean canPlaceDuelCart(Player player, Location rail) {
+        return !duelCountdownActive && !duelEnding
+            && isInActiveDuel(player.getUniqueId())
+            && isInsideArenaShell(player.getLocation()) && isInsideArenaShell(rail) && isArenaTerrainBlock(rail)
+            && canUseExplosive(Material.TNT_MINECART, player);
+    }
+
     public boolean isExplosiveMaterialAllowed(Material material) {
         if (!isRestrictedExplosiveMaterial(material)) {
             return true;

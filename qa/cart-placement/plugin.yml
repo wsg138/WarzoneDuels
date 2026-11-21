@@ -1,0 +1,5 @@
+name: CartPlacementProbe
+version: 1.0
+main: CartPlacementProbe
+api-version: "1.21"
+depend: [WorldGuard, WarzoneDuels]

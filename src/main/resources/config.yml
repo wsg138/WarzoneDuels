@@ -247,3 +247,7 @@ maps:
     schematic-file: "desert-map.schem"
     paste-air: false
     availability-note: "GUI-ready placeholder. Terrain pasting/reset is not wired yet."
+
+# Permit selected duel TNT carts on arena rails inside a WorldGuard region that explicitly allows TNT.
+worldguard:
+  allow-duel-tnt-carts: false
